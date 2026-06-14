@@ -1,0 +1,2 @@
+# minecraft-aws
+AWS上にminecraftサーバーを立ち上げます。discordでサーバー起動し、誰もログインしてなかったら自動でサーバー停止。
