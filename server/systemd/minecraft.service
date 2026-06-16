@@ -1,0 +1,30 @@
+[Unit]
+Description=Minecraft (Fabric) server
+# ネットワークが整ってから起動する（EIP関連付け/S3同期はinstall.shが先行実施済み）。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/minecraft.env
+WorkingDirectory=/opt/minecraft/server
+# Fabric Server Launcher jar は固定名 fabric-server-launch.jar とする（jar名規約。docs参照）。
+# -Xmx6G/-Xms6G は c8g.xlarge(8GB) 前提。Aikar系GCフラグでチャンク生成時の停止を抑える。
+ExecStart=/usr/bin/java \
+    -Xmx6G -Xms6G \
+    -XX:+UseG1GC \
+    -XX:+ParallelRefProcEnabled \
+    -XX:MaxGCPauseMillis=200 \
+    -XX:+UnlockExperimentalVMOptions \
+    -XX:+DisableExplicitGC \
+    -XX:G1HeapRegionSize=8M \
+    -jar fabric-server-launch.jar nogui
+# 停止時（OSシャットダウン/ASG終了/スポット中断いずれもACPI停止→systemd停止）に必ずsaveする。
+ExecStop=/opt/minecraft/bin/save-and-sync.sh
+# スポット中断猶予(約2分)内に save+S3同期を終えるための停止タイムアウト。
+TimeoutStopSec=110
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: minecraft function (Discord interaction Lambda / alarm notify Lambda)
+
+###############################
+# パラメーター
+###############################
+Parameters:
+  Env:
+    Type: String
+    Description: 環境種別
+  ProductName:
+    Type: String
+    Description: プロダクト名
+
+###############################
+# リソース
+###############################
+Resources:
+  ###############################
+  # Discord Interaction Lambda
+  ###############################
+  ### DiscordInteractionFunction ### Discordスラッシュコマンド → ASG起動
+  DiscordInteractionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProductName}-discord-interaction-${Env}
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Timeout: 10
+      # package は --template-file のディレクトリ(cloudformation/)基準で相対解決するため ../src
+      Code: ../src/discord-interaction
+      Role:
+        Fn::ImportValue: !Sub ${ProductName}-discord-lambda-role-arn
+      Environment:
+        Variables:
+          ASG_NAME:
+            Fn::ImportValue: !Sub ${ProductName}-asg-name
+          DISCORD_PUBLIC_KEY_SSM: DISCORD_PUBLIC_KEY
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### DiscordInteractionFunctionUrl ### Interactions Endpoint 用 Function URL
+  DiscordInteractionFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: NONE
+      TargetFunctionArn: !GetAtt DiscordInteractionFunction.Arn
+
+  ### DiscordInteractionFunctionUrlPermission ### Function URL の公開呼び出し許可
+  DiscordInteractionFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref DiscordInteractionFunction
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  ###############################
+  # Alarm Notify Lambda
+  ###############################
+  ### AlarmNotifyFunction ### SNS/EventBridge → Discord Webhook 通知
+  AlarmNotifyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProductName}-alarm-notify-${Env}
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Timeout: 10
+      # package は --template-file のディレクトリ(cloudformation/)基準で相対解決するため ../src
+      Code: ../src/alarm-notify
+      Role:
+        Fn::ImportValue: !Sub ${ProductName}-alarm-notify-lambda-role-arn
+      Environment:
+        Variables:
+          DISCORD_WEBHOOK_SSM: DISCORD_WEBHOOK
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### AlarmNotifySnsSubscription ### AlarmTopic → AlarmNotifyFunction
+  AlarmNotifySnsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt AlarmNotifyFunction.Arn
+      TopicArn:
+        Fn::ImportValue: !Sub ${ProductName}-alarm-topic-arn
+
+  ### AlarmNotifySnsPermission ### SNSからの起動許可
+  AlarmNotifySnsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AlarmNotifyFunction
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Fn::ImportValue: !Sub ${ProductName}-alarm-topic-arn
+
+  ###############################
+  # EventBridge (スポット起動失敗通知)
+  ###############################
+  ### SpotLaunchFailureRule ### ASGの起動失敗を拾い AlarmNotifyFunction へ
+  SpotLaunchFailureRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${ProductName}-spot-launch-failure-${Env}
+      Description: notify ASG EC2 instance launch unsuccessful
+      EventPattern:
+        source:
+          - aws.autoscaling
+        detail-type:
+          - EC2 Instance Launch Unsuccessful
+        detail:
+          AutoScalingGroupName:
+            - Fn::ImportValue: !Sub ${ProductName}-asg-name
+      State: ENABLED
+      Targets:
+        - Id: AlarmNotifyFunction
+          Arn: !GetAtt AlarmNotifyFunction.Arn
+
+  ### SpotLaunchFailurePermission ### EventBridgeからの起動許可
+  SpotLaunchFailurePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AlarmNotifyFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SpotLaunchFailureRule.Arn
+
+###############################
+# 出力
+###############################
+Outputs:
+  DiscordFunctionUrl:
+    Value: !GetAtt DiscordInteractionFunctionUrl.FunctionUrl
+    Export:
+      Name: !Sub ${ProductName}-discord-function-url

@@ -1,0 +1,257 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: minecraft security (SG / EC2 instance role / Lambda roles)
+
+###############################
+# パラメーター
+###############################
+Parameters:
+  Env:
+    Type: String
+    Description: 環境種別
+  ProductName:
+    Type: String
+    Description: プロダクト名
+
+###############################
+# リソース
+###############################
+Resources:
+  ###############################
+  # Sg
+  ###############################
+  ### McServerSg ### Minecraft(25565/tcp)のみ公開。RCON/SSHは公開しない
+  McServerSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProductName}-mc-sg-${Env}
+      GroupDescription: minecraft server security group
+      VpcId:
+        Fn::ImportValue: !Sub ${ProductName}-vpc-id
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          Description: Minecraft
+          FromPort: 25565
+          IpProtocol: tcp
+          ToPort: 25565
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: allow all egress
+          IpProtocol: "-1"
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProductName}-mc-sg-${Env}
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ###############################
+  # IAM Role (EC2)
+  ###############################
+  ### Ec2InstanceRole ### Minecraftインスタンス用ロール
+  Ec2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProductName}-ec2-role-${Env}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # SSM Session Manager（SSH非公開運用）
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: !Sub ${ProductName}-ec2-policy-${Env}
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # S3: worldバケット限定
+              - Sid: WorldBucketObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub arn:aws:s3:::${ProductName}-world-${Env}/*
+              - Sid: WorldBucketList
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub arn:aws:s3:::${ProductName}-world-${Env}
+              # AutoScaling: 自己終了 / 状態確認
+              - Sid: AutoScalingSelfTerminate
+                Effect: Allow
+                Action:
+                  - autoscaling:TerminateInstanceInAutoScalingGroup
+                  - autoscaling:DescribeAutoScalingGroups
+                Resource: "*"
+              # EIP: 関連付け / 解除 / 確認
+              - Sid: ElasticIpAssociate
+                Effect: Allow
+                Action:
+                  - ec2:AssociateAddress
+                  - ec2:DisassociateAddress
+                  - ec2:DescribeAddresses
+                Resource: "*"
+              # CloudWatch Agent: メトリクス送信
+              - Sid: CloudWatchPutMetric
+                Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+              # SSM Parameter Store: RCON_PASSWORD / DISCORD_WEBHOOK 読み取り
+              - Sid: SsmParameterRead
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/RCON_PASSWORD
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DISCORD_WEBHOOK
+              # SecureString復号（AWS管理キー）
+              - Sid: SsmKmsDecrypt
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### Ec2InstanceProfile ###
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${ProductName}-ec2-instance-profile-${Env}
+      Roles:
+        - !Ref Ec2InstanceRole
+
+  ###############################
+  # IAM Role (Lambda)
+  ###############################
+  ### DiscordLambdaRole ### Discord Interaction Lambda 用
+  DiscordLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProductName}-discord-lambda-role-${Env}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${ProductName}-discord-lambda-policy-${Env}
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # ASG操作（起動 / 再起動時のインスタンス作り直し / 状態確認）
+              - Sid: AutoScalingDesiredCapacity
+                Effect: Allow
+                Action:
+                  - autoscaling:SetDesiredCapacity
+                  - autoscaling:TerminateInstanceInAutoScalingGroup
+                  - autoscaling:DescribeAutoScalingGroups
+                Resource: "*"
+              # Discord Public Key（SecureString）読み取り
+              - Sid: SsmDiscordPublicKey
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DISCORD_PUBLIC_KEY
+              - Sid: SsmKmsDecrypt
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+              # Lambda基本実行（CloudWatch Logs）
+              - Sid: LambdaLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### AlarmNotifyLambdaRole ### アラーム通知 Lambda 用
+  AlarmNotifyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProductName}-alarm-notify-lambda-role-${Env}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${ProductName}-alarm-notify-lambda-policy-${Env}
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Discord Webhook URL（SecureString）読み取り
+              - Sid: SsmWebhookUrl
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DISCORD_WEBHOOK
+              - Sid: SsmKmsDecrypt
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+              # Lambda基本実行（CloudWatch Logs）
+              - Sid: LambdaLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+###############################
+# 出力
+###############################
+Outputs:
+  McServerSgId:
+    Value: !Ref McServerSg
+    Export:
+      Name: !Sub ${ProductName}-mc-sg-id
+  Ec2InstanceProfileArn:
+    Value: !GetAtt Ec2InstanceProfile.Arn
+    Export:
+      Name: !Sub ${ProductName}-ec2-instance-profile-arn
+  DiscordLambdaRoleArn:
+    Value: !GetAtt DiscordLambdaRole.Arn
+    Export:
+      Name: !Sub ${ProductName}-discord-lambda-role-arn
+  AlarmNotifyLambdaRoleArn:
+    Value: !GetAtt AlarmNotifyLambdaRole.Arn
+    Export:
+      Name: !Sub ${ProductName}-alarm-notify-lambda-role-arn

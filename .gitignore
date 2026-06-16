@@ -1,0 +1,7 @@
+# Fabric サーバーのビルド成果物（ランチャー / MOD jar 群）。
+# 版は mods.lock / server.lock（どちらも repo 直下・コミット対象）で固定し、
+# 実体は CI(build-server.sh --frozen) が都度ダウンロードして S3 へ上げるためコミットしない。
+/my-fabric-server/
+
+# ローカル作業ログ
+*.log

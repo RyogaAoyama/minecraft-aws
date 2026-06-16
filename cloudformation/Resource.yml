@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: minecraft resource (world S3 bucket / Elastic IP / alarm SNS topic)
+
+###############################
+# パラメーター
+###############################
+Parameters:
+  Env:
+    Type: String
+    Description: 環境種別
+  ProductName:
+    Type: String
+    Description: プロダクト名
+  NonCurrentVersionExpirationDays:
+    Type: Number
+    Default: 30
+    Description: world非現行バージョンを削除するまでの日数
+
+###############################
+# リソース
+###############################
+Resources:
+  ###############################
+  # S3
+  ###############################
+  ### WorldBucket ### Minecraftサーバー資産(world/mods/jar等)の保管庫
+  WorldBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub ${ProductName}-world-${Env}
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref NonCurrentVersionExpirationDays
+          - Id: abort-incomplete-multipart-upload
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ###############################
+  # Elastic IP
+  ###############################
+  ### ServerEip ### Minecraftサーバーの固定IP（UserDataで関連付け）
+  ServerEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProductName}-eip-${Env}
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ###############################
+  # SNS
+  ###############################
+  ### AlarmTopic ### CloudWatchアラーム → 通知Lambda の中継トピック
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${ProductName}-alarm-topic-${Env}
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+###############################
+# 出力
+###############################
+Outputs:
+  WorldBucketName:
+    Value: !Ref WorldBucket
+    Export:
+      Name: !Sub ${ProductName}-world-bucket-name
+  ServerEipAllocationId:
+    Value: !GetAtt ServerEip.AllocationId
+    Export:
+      Name: !Sub ${ProductName}-eip-allocation-id
+  AlarmTopicArn:
+    Value: !Ref AlarmTopic
+    Export:
+      Name: !Sub ${ProductName}-alarm-topic-arn

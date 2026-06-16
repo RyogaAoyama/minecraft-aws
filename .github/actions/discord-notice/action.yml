@@ -1,0 +1,26 @@
+name: discord notification
+
+inputs:
+  webhook:
+    description: Discord webhook URL
+    required: true
+  content:
+    description: message content
+    required: true
+  username:
+    description: webhook display name
+    required: false
+    default: minecraft-aws
+
+runs:
+  using: composite
+  steps:
+    - name: Send notification
+      shell: bash
+      env:
+        WEBHOOK: ${{ inputs.webhook }}
+        CONTENT: ${{ inputs.content }}
+        USERNAME: ${{ inputs.username }}
+      run: |
+        payload=$(jq -n --arg content "$CONTENT" --arg username "$USERNAME" '{content: $content, username: $username}')
+        curl -fsS -X POST -H "Content-Type: application/json" -d "$payload" "$WEBHOOK"

@@ -1,0 +1,7 @@
+[Unit]
+Description=Check Minecraft idle players and auto-terminate when empty
+After=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/idle-check.sh

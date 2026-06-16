@@ -1,0 +1,9 @@
+{
+  "name": "minecraft-discord-interaction",
+  "version": "1.0.0",
+  "description": "Discord Interactions Webhook handler that starts the Minecraft ASG.",
+  "type": "module",
+  "main": "index.mjs",
+  "private": true,
+  "comment": "AWS SDK v3 (@aws-sdk/client-ssm, @aws-sdk/client-auto-scaling) は nodejs24.x ランタイムに同梱されるため dependencies には記載しない。"
+}
