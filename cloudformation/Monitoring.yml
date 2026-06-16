@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: minecraft monitoring (CPU / memory / disk CloudWatch alarms)
+
+###############################
+# パラメーター
+###############################
+Parameters:
+  Env:
+    Type: String
+    Description: 環境種別
+  ProductName:
+    Type: String
+    Description: プロダクト名
+  CpuThreshold:
+    Type: Number
+    Default: 90
+    Description: CPU使用率アラームしきい値(%)
+  MemThreshold:
+    Type: Number
+    Default: 92
+    Description: メモリ使用率アラームしきい値(%)
+  DiskThreshold:
+    Type: Number
+    Default: 80
+    Description: ディスク使用率アラームしきい値(%)
+  DiskPath:
+    Type: String
+    Default: /
+    Description: ディスクアラーム対象のマウントパス
+  DiskFstype:
+    Type: String
+    Default: xfs
+    Description: ディスクアラーム対象のファイルシステム種別
+
+###############################
+# リソース
+###############################
+Resources:
+  ###############################
+  # CloudWatch Alarm
+  ###############################
+  ### CpuAlarm ### 15分平均でCPU逼迫を検知（短時間スパイクは無視）
+  CpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProductName}-cpu-alarm-${Env}
+      AlarmDescription: CPUUtilization sustained high
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: !Ref CpuThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - Fn::ImportValue: !Sub ${ProductName}-alarm-topic-arn
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Fn::ImportValue: !Sub ${ProductName}-asg-name
+
+  ### MemAlarm ### CWAgent mem_used_percent。OOM接近のみ検知
+  MemAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProductName}-mem-alarm-${Env}
+      AlarmDescription: memory usage sustained high
+      Namespace: CWAgent
+      MetricName: mem_used_percent
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: !Ref MemThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - Fn::ImportValue: !Sub ${ProductName}-alarm-topic-arn
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Fn::ImportValue: !Sub ${ProductName}-asg-name
+
+  ### DiskAlarm ### CWAgent disk_used_percent。world肥大によるEBS枯渇予兆
+  DiskAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProductName}-disk-alarm-${Env}
+      AlarmDescription: disk usage sustained high
+      Namespace: CWAgent
+      MetricName: disk_used_percent
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: !Ref DiskThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - Fn::ImportValue: !Sub ${ProductName}-alarm-topic-arn
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Fn::ImportValue: !Sub ${ProductName}-asg-name
+        - Name: path
+          Value: !Ref DiskPath
+        - Name: fstype
+          Value: !Ref DiskFstype

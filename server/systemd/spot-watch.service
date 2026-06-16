@@ -1,0 +1,15 @@
+[Unit]
+Description=Watch for spot interruption and save world before shutdown
+After=minecraft.service
+
+[Service]
+Type=simple
+ExecStart=/opt/minecraft/bin/spot-watch.sh
+# spot-watch は中断検知後に save して正常終了(exit0)する設計。
+# always だと正常終了後に再起動して二重 save しうるため on-failure とする
+# （中断検知後はシステムが停止へ向かうので監視を継続する必要はない）。
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

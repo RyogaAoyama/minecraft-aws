@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic Minecraft idle check (every 1 min)
+
+[Timer]
+# 起動1分後に初回、以降1分間隔。0人が10回連続(=10分)でインスタンス自己終了。
+OnUnitActiveSec=1min
+OnBootSec=1min
+Unit=idle-check.service
+
+[Install]
+WantedBy=timers.target

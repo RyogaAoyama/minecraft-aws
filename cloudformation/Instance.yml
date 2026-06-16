@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: minecraft instance (LaunchTemplate / spot AutoScalingGroup)
+
+###############################
+# パラメーター
+###############################
+Parameters:
+  Env:
+    Type: String
+    Description: 環境種別
+  ProductName:
+    Type: String
+    Description: プロダクト名
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: AL2023 arm64 の最新AMI（SSM公開パラメータ経由）
+  RootVolumeSize:
+    Type: Number
+    Default: 30
+    Description: ルートEBS(gp3)サイズ(GiB)
+  AwsRegion:
+    Type: String
+    Default: ap-northeast-1
+    Description: 稼働リージョン
+
+###############################
+# リソース
+###############################
+Resources:
+  ###############################
+  # LaunchTemplate
+  ###############################
+  ### McLaunchTemplate ###
+  McLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${ProductName}-lt-${Env}
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        IamInstanceProfile:
+          Arn:
+            Fn::ImportValue: !Sub ${ProductName}-ec2-instance-profile-arn
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub ${ProductName}-mc-sg-id
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: !Ref RootVolumeSize
+              VolumeType: gp3
+              DeleteOnTermination: true
+              Encrypted: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+          HttpPutResponseHopLimit: 1
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${ProductName}-server-${Env}
+              - Key: ProductName
+                Value: !Ref ProductName
+              - Key: Env
+                Value: !Ref Env
+        UserData:
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #!/bin/bash
+                set -euo pipefail
+
+                # サーバー設定値を /etc/minecraft.env に書き出す（重い処理はinstall.shに委譲）
+                cat <<'ENVEOF' > /etc/minecraft.env
+                AWS_REGION=${AwsRegion}
+                WORLD_BUCKET=${ProductName}-world-${Env}
+                ASG_NAME=${ProductName}-asg-${Env}
+                EIP_ALLOCATION_ID=${EipAllocationId}
+                MC_DIR=/opt/minecraft
+                RCON_PORT=25575
+                RCON_PASSWORD_SSM=RCON_PASSWORD
+                DISCORD_WEBHOOK_SSM=DISCORD_WEBHOOK
+                ENVEOF
+
+                # bootstrap資材（管理スクリプト/systemdユニット）をS3から取得
+                mkdir -p /opt/minecraft/bootstrap
+                aws s3 sync "s3://${ProductName}-world-${Env}/bootstrap/" /opt/minecraft/bootstrap/ --region "${AwsRegion}"
+
+                # 実行権付与（globミスマッチでUserDataを止めない）
+                chmod +x /opt/minecraft/bootstrap/install.sh /opt/minecraft/bootstrap/bin/*.sh 2>/dev/null || true
+
+                # install.sh 不在を検知（bootstrap未同期=空のまま無言で止まるのを防ぐ）
+                if [ ! -f /opt/minecraft/bootstrap/install.sh ]; then
+                  echo "[minecraft-userdata] FATAL: /opt/minecraft/bootstrap/install.sh not found. bootstrap may not be synced to s3://${ProductName}-world-${Env}/bootstrap/" | tee -a /var/log/minecraft-userdata.log >&2
+                  exit 1
+                fi
+
+                # セットアップ本体（依存導入・systemd配置・スクリプト最終配置・起動）を実行
+                bash /opt/minecraft/bootstrap/install.sh
+              - EipAllocationId:
+                  Fn::ImportValue: !Sub ${ProductName}-eip-allocation-id
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: ProductName
+              Value: !Ref ProductName
+            - Key: Env
+              Value: !Ref Env
+
+  ###############################
+  # AutoScalingGroup
+  ###############################
+  ### McAutoScalingGroup ### min0/max1/desired0。Discord起動でdesired=1
+  McAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${ProductName}-asg-${Env}
+      MinSize: "0"
+      MaxSize: "1"
+      DesiredCapacity: "0"
+      VPCZoneIdentifier:
+        Fn::Split:
+          - ","
+          - Fn::ImportValue: !Sub ${ProductName}-public-subnet-ids
+      CapacityRebalance: false
+      MixedInstancesPolicy:
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref McLaunchTemplate
+            Version: !GetAtt McLaunchTemplate.LatestVersionNumber
+          Overrides:
+            - InstanceType: c8g.xlarge
+            - InstanceType: m8g.xlarge
+            - InstanceType: c8i.xlarge
+        InstancesDistribution:
+          OnDemandBaseCapacity: 0
+          OnDemandPercentageAboveBaseCapacity: 0
+          SpotAllocationStrategy: capacity-optimized
+      MetricsCollection:
+        - Granularity: 1Minute
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProductName}-server-${Env}
+          PropagateAtLaunch: true
+        - Key: ProductName
+          Value: !Ref ProductName
+          PropagateAtLaunch: true
+        - Key: Env
+          Value: !Ref Env
+          PropagateAtLaunch: true
+
+###############################
+# 出力
+###############################
+Outputs:
+  AutoScalingGroupName:
+    Value: !Ref McAutoScalingGroup
+    Export:
+      Name: !Sub ${ProductName}-asg-name

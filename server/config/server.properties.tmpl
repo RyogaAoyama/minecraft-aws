@@ -1,0 +1,30 @@
+# Minecraft server.properties テンプレート（Fabric 1.21.11）
+# install.sh が __RCON_PASSWORD__ / __RCON_PORT__ を実値へ置換して
+# /opt/minecraft/server/server.properties を生成する。
+# 生成後のファイルは RCON パスワードを含むためリポジトリにはコミットしない。
+
+# 接続ポート（SecurityGroupで25565/tcpのみ公開）
+server-port=25565
+
+# 正規アカウント認証（割れ対策・推奨）
+online-mode=true
+
+# 少人数運用
+max-players=10
+
+motd=Minecraft on AWS (spot)
+
+# RCON: アイドル監視/保存制御のためローカル(127.0.0.1)からのみ利用。
+# RCONポートはSecurityGroupで外部公開しない。
+enable-rcon=true
+rcon.port=__RCON_PORT__
+rcon.password=__RCON_PASSWORD__
+
+# クエリは使わない
+enable-query=false
+
+# 性能/運用上の既定
+view-distance=10
+simulation-distance=10
+spawn-protection=0
+white-list=false

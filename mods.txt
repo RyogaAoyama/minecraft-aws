@@ -1,0 +1,47 @@
+# =============================================================================
+# mods.txt - Minecraft サーバー MOD 宣言ファイル（Python の requirements.txt 相当）
+# =============================================================================
+#
+# このファイルに必要な MOD を宣言し、`sh/fetch-mods.sh` を実行すると
+# Modrinth から一括ダウンロードして mods/ を生成し、解決した版を mods.lock に固定します。
+# 生成した mods/ を S3 の world/ プレフィックスへ上げて使う運用です（docs/mods.md 参照）。
+#
+# 記法:
+#   slug                 … 対象 MC/loader 向けの最新 release を自動選択
+#   slug==<version_id>   … Modrinth の version_id で完全固定（再現性最優先）
+#   #                    … コメント行・行末コメント
+#   （空行は無視されます）
+#
+# 対象（スクリプトのデフォルトと一致させること。混在は不可）:
+# mc: 1.21.11
+# loader: fabric
+#
+# 注意: ここに列挙するのは「サーバー側に必要な MOD」のみ。
+#   クライアント専用 MOD（Sodium / Iris 等のレンダリング系）は含めません。
+#   ワールド生成・構造物系はクライアント側にも同じ MOD/版が必要です（docs/mods.md 参照）。
+#
+# slug の確認方法: `curl -s -H 'User-Agent: minecraft-aws/1.0 (github)' \
+#   https://api.modrinth.com/v2/project/<slug>` で 200 が返れば実在。
+# -----------------------------------------------------------------------------
+
+# --- 依存ライブラリ（他 MOD の前提。必ず先に） ---
+fabric-api          # 大半の Fabric MOD が依存する共通 API
+lithostitched       # ワールド生成系 MOD（Terralith/Incendium/Nullscape 等）の共通前提
+cristel-lib         # Cristel Lib（Towns&Towers/CTOV の必須依存）
+cloth-config        # Cloth Config（設定ライブラリ。required 依存）
+
+# --- ワールド生成（バイオーム・地形） ---
+terralith           # バニラ+の地形/バイオーム拡張（Lithostitched 依存）
+tectonic            # 地形生成オーバーホール（山・川をダイナミックに）
+incendium           # ネザーのバイオーム/構造物拡張（Lithostitched 依存）
+nullscape           # エンドのバイオーム/地形拡張（Lithostitched 依存）
+
+# --- 構造物・村・建造物 ---
+ct-overhaul-village # ChoiceTheorem's Overhauled Village: 村の全面刷新
+towns-and-towers    # 村と街道沿いの建造物/前哨基地を追加
+structory           # 各バイオームに探索用の小〜中規模構造物を追加
+
+# --- サーバーパフォーマンス最適化 ---
+lithium             # ゲームロジックの汎用最適化（描画に手を入れずサーバーでも有効）
+c2me-fabric         # チャンク生成/IO の並列化（探索・新規地形生成を高速化）
+ferrite-core        # メモリ使用量削減（重複データの共有化）

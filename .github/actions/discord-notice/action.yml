@@ -1,0 +1,33 @@
+name: discord notification
+
+inputs:
+  webhook:
+    description: Discord webhook URL
+    required: true
+  content:
+    description: message content
+    required: true
+  username:
+    description: webhook display name
+    required: false
+    default: minecraft-aws
+
+runs:
+  using: composite
+  steps:
+    - name: Send notification
+      shell: bash
+      env:
+        WEBHOOK: ${{ inputs.webhook }}
+        CONTENT: ${{ inputs.content }}
+        USERNAME: ${{ inputs.username }}
+      run: |
+        # 通知は補助機能。webhook 未設定や送信失敗でデプロイ全体を失敗扱いにしない
+        # （サーバー側 mc-notify.sh と同じ「通知が落ちても本体は継続」方針）。
+        if [ -z "$WEBHOOK" ]; then
+          echo "warn: DISCORD_WEBHOOK 未設定のため通知をスキップします"
+          exit 0
+        fi
+        payload=$(jq -n --arg content "$CONTENT" --arg username "$USERNAME" '{content: $content, username: $username}')
+        curl -fsS -X POST -H "Content-Type: application/json" -d "$payload" "$WEBHOOK" \
+          || echo "warn: Discord 通知の送信に失敗しました（デプロイは継続）"

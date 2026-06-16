@@ -1,0 +1,8 @@
+[Unit]
+Description=Sync Minecraft world to S3 (periodic)
+# 本体が動いている時のみ意味があるが、停止中でもディスク現状を同期できるよう依存は緩く保つ。
+After=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/world-sync.sh

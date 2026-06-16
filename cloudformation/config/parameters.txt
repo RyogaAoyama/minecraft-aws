@@ -1,0 +1,1 @@
+export PRODUCT_NAME=minecraft
