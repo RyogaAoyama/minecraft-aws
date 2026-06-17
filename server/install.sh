@@ -164,6 +164,9 @@ for _ in $(seq 1 180); do
 done
 
 if [ "$READY" -eq 1 ]; then
+    # shellcheck source=server/bin/mc-rcon.sh
+    source "$BIN_DIR/mc-rcon.sh"
+
     # ホワイトリスト登録（config/whitelist-players.txt に記載されたプレイヤーを自動追加）。
     # サーバーが online-mode=true で稼働中のため、whitelist add が Mojang API で UUID を解決する。
     WHITELIST_FILE="$CONFIG_SRC/whitelist-players.txt"
