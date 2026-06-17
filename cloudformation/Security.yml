@@ -154,14 +154,12 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              # ASG操作（起動 / 再起動時のインスタンス作り直し / 状態確認）
-              - Sid: AutoScalingDesiredCapacity
+              # worker Lambda の非同期 invoke（重いASG処理は worker へ委譲）。
+              # 循環参照を避けるため fnc スタックを参照せず、関数名ベースの ARN を直接組み立てる。
+              - Sid: InvokeWorker
                 Effect: Allow
-                Action:
-                  - autoscaling:SetDesiredCapacity
-                  - autoscaling:TerminateInstanceInAutoScalingGroup
-                  - autoscaling:DescribeAutoScalingGroups
-                Resource: "*"
+                Action: lambda:InvokeFunction
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProductName}-discord-worker-${Env}
               # Discord Public Key（SecureString）読み取り
               - Sid: SsmDiscordPublicKey
                 Effect: Allow
@@ -176,6 +174,45 @@ Resources:
                 Condition:
                   StringEquals:
                     kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+              # Lambda基本実行（CloudWatch Logs）
+              - Sid: LambdaLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### DiscordWorkerRole ### Discord worker Lambda 用（ASG操作 / followupはBot Token不要のためSSM不要）
+  DiscordWorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProductName}-discord-worker-role-${Env}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${ProductName}-discord-worker-policy-${Env}
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # ASG操作（起動 / 再起動時のインスタンス作り直し / 状態確認）
+              - Sid: AutoScalingDesiredCapacity
+                Effect: Allow
+                Action:
+                  - autoscaling:SetDesiredCapacity
+                  - autoscaling:TerminateInstanceInAutoScalingGroup
+                  - autoscaling:DescribeAutoScalingGroups
+                Resource: "*"
               # Lambda基本実行（CloudWatch Logs）
               - Sid: LambdaLogs
                 Effect: Allow
@@ -251,6 +288,10 @@ Outputs:
     Value: !GetAtt DiscordLambdaRole.Arn
     Export:
       Name: !Sub ${ProductName}-discord-lambda-role-arn
+  DiscordWorkerRoleArn:
+    Value: !GetAtt DiscordWorkerRole.Arn
+    Export:
+      Name: !Sub ${ProductName}-discord-worker-role-arn
   AlarmNotifyLambdaRoleArn:
     Value: !GetAtt AlarmNotifyLambdaRole.Arn
     Export:

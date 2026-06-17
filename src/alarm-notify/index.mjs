@@ -50,14 +50,22 @@ async function getWebhookUrl() {
  * @param {object} alarm SNS メッセージをパースした Alarm オブジェクト
  * @returns {string} 通知本文
  */
+const COMPARISON_LABELS = {
+  GreaterThanThreshold: "以上",
+  GreaterThanOrEqualToThreshold: "以上",
+  LessThanThreshold: "以下",
+  LessThanOrEqualToThreshold: "以下",
+};
+
 function formatAlarmMessage(alarm) {
   const trigger = alarm.Trigger ?? {};
   const icon = alarm.NewStateValue === "ALARM" ? "🔴" : "🟢";
+  const op = COMPARISON_LABELS[trigger.ComparisonOperator] ?? trigger.ComparisonOperator ?? "-";
   const lines = [
     `${icon} **CloudWatch Alarm: ${alarm.AlarmName}**`,
     `状態: ${alarm.OldStateValue} → ${alarm.NewStateValue}`,
     `メトリクス: ${trigger.Namespace ?? "-"} / ${trigger.MetricName ?? "-"}`,
-    `しきい値: ${trigger.ComparisonOperator ?? "-"} ${trigger.Threshold ?? "-"}` +
+    `しきい値: ${trigger.Threshold ?? "-"}${op}` +
       ` (${trigger.EvaluationPeriods ?? "-"} × ${trigger.Period ?? "-"}s)`,
     `理由: ${alarm.NewStateReason ?? "-"}`,
   ];

@@ -1,0 +1,9 @@
+{
+  "name": "minecraft-discord-worker",
+  "version": "1.0.0",
+  "description": "Runs heavy Discord slash command work (ASG start/restart) asynchronously and reports results via interaction followup.",
+  "type": "module",
+  "main": "index.mjs",
+  "private": true,
+  "comment": "AWS SDK v3 (@aws-sdk/client-auto-scaling) と fetch は nodejs24.x ランタイムに同梱されるため dependencies には記載しない。"
+}

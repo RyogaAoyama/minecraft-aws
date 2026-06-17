@@ -19,7 +19,8 @@ Resources:
   ###############################
   # Discord Interaction Lambda
   ###############################
-  ### DiscordInteractionFunction ### Discordスラッシュコマンド → ASG起動
+  ### DiscordInteractionFunction ### Discordスラッシュコマンドの受付（署名検証＋workerへ非同期委譲）
+  ### 3秒応答制限内に deferred を返すため、重いASG処理は DiscordWorkerFunction へ非同期 invoke する。
   DiscordInteractionFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -33,9 +34,31 @@ Resources:
         Fn::ImportValue: !Sub ${ProductName}-discord-lambda-role-arn
       Environment:
         Variables:
+          DISCORD_PUBLIC_KEY_SSM: DISCORD_PUBLIC_KEY
+          WORKER_FUNCTION_NAME: !Ref DiscordWorkerFunction
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### DiscordWorkerFunction ### 受付から非同期 invoke され、ASG操作 → followup でメッセージ更新を行う
+  DiscordWorkerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProductName}-discord-worker-${Env}
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Timeout: 30
+      MemorySize: 256
+      # package は --template-file のディレクトリ(cloudformation/)基準で相対解決するため ../src
+      Code: ../src/discord-worker
+      Role:
+        Fn::ImportValue: !Sub ${ProductName}-discord-worker-role-arn
+      Environment:
+        Variables:
           ASG_NAME:
             Fn::ImportValue: !Sub ${ProductName}-asg-name
-          DISCORD_PUBLIC_KEY_SSM: DISCORD_PUBLIC_KEY
       Tags:
         - Key: ProductName
           Value: !Ref ProductName

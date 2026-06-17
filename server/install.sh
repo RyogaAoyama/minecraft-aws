@@ -147,12 +147,16 @@ if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
             "http://169.254.169.254/latest/meta-data/public-ipv4"; } || true)"
 fi
 
-# shellcheck source=server/bin/mc-rcon.sh
-source "$BIN_DIR/mc-rcon.sh"
-
+# 起動完了は「接続受付可能になった正式な合図」＝サーバーログの `Done (` 出力で判定する。
+# Minecraft サーバーは起動完了時に `Done (X.Xs)! For help, type "help"` を標準出力へ出し、
+# Type=simple の systemd ユニット配下では journald に記録される。
+# RCON list 応答よりこちらの方が正式な「接続受付可能」の合図であり、初回の重い起動
+# （libraries 再DL + ワールドロード）でも取りこぼさないよう待ち時間を十分に延ばす（5秒×180回＝約15分）。
+# 注: `set -euo pipefail` 下で journalctl|grep の grep 不一致(exit 1)がスクリプトを落とさないよう、
+#     判定は if 条件として扱う（不一致時はそのまま次ループへ進む）。
 READY=0
-for _ in $(seq 1 60); do
-    if mc_rcon list >/dev/null 2>&1; then
+for _ in $(seq 1 180); do
+    if journalctl -u minecraft.service --no-pager 2>/dev/null | grep -q "Done ("; then
         READY=1
         break
     fi
@@ -160,7 +164,18 @@ for _ in $(seq 1 60); do
 done
 
 if [ "$READY" -eq 1 ]; then
-    mc_notify "🟢 Minecraftサーバーの起動が完了しました。接続先: ${PUBLIC_IP}:25565"
+    # ホワイトリスト登録（config/whitelist-players.txt に記載されたプレイヤーを自動追加）。
+    # サーバーが online-mode=true で稼働中のため、whitelist add が Mojang API で UUID を解決する。
+    WHITELIST_FILE="$CONFIG_SRC/whitelist-players.txt"
+    if [ -f "$WHITELIST_FILE" ]; then
+        while IFS= read -r player || [ -n "$player" ]; do
+            [ -z "$player" ] && continue
+            mc_rcon "whitelist add $player" || echo "warn: failed to whitelist $player"
+        done < "$WHITELIST_FILE"
+        echo "whitelist players registered"
+    fi
+
+    mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${PUBLIC_IP}:25565"
     echo "server ready; notified Discord"
 else
     mc_notify "🟠 Minecraftサーバーの起動確認がタイムアウトしました（接続先候補: ${PUBLIC_IP}:25565）。ログを確認してください。"

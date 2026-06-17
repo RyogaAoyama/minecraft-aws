@@ -16,8 +16,9 @@
 # mc: 1.21.11
 # loader: fabric
 #
-# 注意: ここに列挙するのは「サーバー側に必要な MOD」のみ。
-#   クライアント専用 MOD（Sodium / Iris 等のレンダリング系）は含めません。
+# 注意: ここに列挙するのは「サーバー側に必要な MOD」と「サーバー任意でも入れると
+#   クライアントへ正確なデータを返せる MOD（例: AppleSkin）」のみ。
+#   純粋なクライアント専用 MOD（Sodium / Iris 等のレンダリング系）は含めません。
 #   ワールド生成・構造物系はクライアント側にも同じ MOD/版が必要です（docs/mods.md 参照）。
 #
 # slug の確認方法: `curl -s -H 'User-Agent: minecraft-aws/1.0 (github)' \
@@ -27,21 +28,49 @@
 # --- 依存ライブラリ（他 MOD の前提。必ず先に） ---
 fabric-api          # 大半の Fabric MOD が依存する共通 API
 lithostitched       # ワールド生成系 MOD（Terralith/Incendium/Nullscape 等）の共通前提
-cristel-lib         # Cristel Lib（Towns&Towers/CTOV の必須依存）
-cloth-config        # Cloth Config（設定ライブラリ。required 依存）
+cristel-lib         # Cristel Lib（CTOV の必須依存）
+cloth-config        # Cloth Config（設定ライブラリ。required 依存。beautify-refabricated 等が依存）
+lib-5555ff          # Call Your Horse の必須依存ライブラリ
 
 # --- ワールド生成（バイオーム・地形） ---
 terralith           # バニラ+の地形/バイオーム拡張（Lithostitched 依存）
+wwoo                # William Wythers' Overhauled Overworld: バニラバイオームの全面リワーク（バニラブロックのみ使用）
 tectonic            # 地形生成オーバーホール（山・川をダイナミックに）
 incendium           # ネザーのバイオーム/構造物拡張（Lithostitched 依存）
 nullscape           # エンドのバイオーム/地形拡張（Lithostitched 依存）
 
 # --- 構造物・村・建造物 ---
 ct-overhaul-village # ChoiceTheorem's Overhauled Village: 村の全面刷新
-towns-and-towers    # 村と街道沿いの建造物/前哨基地を追加
 structory           # 各バイオームに探索用の小〜中規模構造物を追加
 
 # --- サーバーパフォーマンス最適化 ---
 lithium             # ゲームロジックの汎用最適化（描画に手を入れずサーバーでも有効）
 c2me-fabric         # チャンク生成/IO の並列化（探索・新規地形生成を高速化）
 ferrite-core        # メモリ使用量削減（重複データの共有化）
+
+# --- HUD補助（サーバーは任意・クライアント必須） ---
+# AppleSkin はクライアント必須・サーバー任意。サーバーにも入れると満腹度/隠し満腹度を
+# クライアントへ正確に同期できる（サーバーに無くてもクライアント単体で動作する）。
+appleskin           # 食料の回復量・満腹度の表示（正確な値の同期のためサーバー側にも導入）
+
+# --- 装飾・建築ブロック（ブロック/アイテム追加。クライアントにも同 MOD・同版が必要） ---
+# ブロックやアイテムを追加するため、ワールド生成系と同様にクライアント側にも同じ版が必要
+# （docs/mods.md「クライアント側の注意」参照）。Sodium 等の純粋な描画系とは異なりサーバー必須。
+beautify-refabricated    # Beautify: Refabricated: バニラ調の装飾ブロック追加（旧 Beautify! の後継。cloth-config 依存）
+macaws-bridges           # Macaw's Bridges: 各種の橋
+macaws-doors             # Macaw's Doors: 追加のドア
+macaws-roofs             # Macaw's Roofs: 屋根ブロック
+macaws-trapdoors         # Macaw's Trapdoors: 追加のトラップドア
+macaws-windows           # Macaw's Windows: 窓・ブラインド
+macaws-fences-and-walls  # Macaw's Fences and Walls: 追加のフェンス・塀
+macaws-stairs            # Macaw's Stairs and Balconies: 階段・バルコニー
+macaws-paths-and-pavings # Macaw's Paths and Pavings: 小道・舗装
+macaws-lights-and-lamps  # Macaw's Lights and Lamps: 照明・ランプ
+macaws-furniture         # Macaw's Furniture: 家具
+
+# --- ゲームプレイ・ユーティリティ（クライアントにも同版が必要） ---
+call-your-horse          # Call Your Horse: どこからでも自分の馬を呼び出す（lib-5555ff 依存）
+
+# 補足:
+#   - Falling Leaves / Particle Tweaks は純粋なクライアント描画系のためサーバーには入れない。
+#   - Fantasy's Furniture は 2026-06 時点で 1.21.11/Fabric ビルドが無く導入不可（更新待ち）。

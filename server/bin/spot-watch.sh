@@ -13,6 +13,8 @@ set -euo pipefail
 
 # shellcheck source=/dev/null
 source /etc/minecraft.env
+# shellcheck source=mc-notify.sh
+source "$(dirname "$0")/mc-notify.sh"
 
 SCRIPT_DIR="$(dirname "$0")"
 POLL_INTERVAL=3
@@ -35,6 +37,8 @@ while true; do
         "$METADATA_URL" >/dev/null 2>&1; then
         echo "spot interruption notice detected; running save-and-sync"
         bash "$SCRIPT_DIR/save-and-sync.sh"
+        # save（データ保護）を済ませてから通知する。
+        mc_notify "⚠️ スポットインスタンスが中断されました。ワールドを保存して停止します。再開するには /start を実行してください。"
         echo "save-and-sync done; spot-watch exiting"
         break
     fi

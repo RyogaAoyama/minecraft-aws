@@ -1,41 +1,39 @@
-// Discord Interactions Webhook を処理する Lambda（Function URL 経由 / nodejs24.x / ESM）
+// Discord Interactions Webhook を処理する受付 Lambda（Function URL 経由 / nodejs24.x / ESM）
 //
 // 役割:
 //   - Lambda Function URL に登録された Discord Interactions Endpoint としてリクエストを受ける
 //   - Ed25519 署名検証（不正は 401）
 //   - type=1(PING) には {type:1} を返す
-//   - type=2(APPLICATION_COMMAND) を data.name で分岐し以下を処理する
-//       - `/start`   ... 停止中なら ASG の desired を 0->1 にして起動
-//       - `/restart` ... 稼働中なら現インスタンスを停止して最新 MOD 構成で作り直し、
-//                          停止中なら desired=1 で起動（MOD更新を S3 から取り込み直す用途）
+//   - type=2(APPLICATION_COMMAND) は worker Lambda を非同期 invoke し、
+//     即座に type=5(DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) を返す
+//
+// 設計意図:
+//   Discord interaction には「3秒以内に応答」の制限がある。ASG 操作（Describe→SetDesiredCapacity 等）
+//   は数秒かかり同期では間に合わないため、重い処理は worker Lambda へ逃がし、受付は deferred を即返す。
+//   実際の処理結果は worker が followup（webhook PATCH）でメッセージを更新して伝える。
 //
 // 環境変数:
-//   ASG_NAME                 ... 起動対象の Auto Scaling Group 名（minecraft-asg-prd）
 //   DISCORD_PUBLIC_KEY_SSM   ... Discord アプリ公開鍵を保持する SSM パラメータ名
+//   WORKER_FUNCTION_NAME     ... 重い処理を非同期実行する worker Lambda の関数名
 //
 // AWS SDK v3 / Node 標準 crypto は nodejs24.x ランタイムに同梱されるため依存追加は不要。
 
 import crypto from "node:crypto";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
-import {
-  AutoScalingClient,
-  DescribeAutoScalingGroupsCommand,
-  SetDesiredCapacityCommand,
-  TerminateInstanceInAutoScalingGroupCommand,
-} from "@aws-sdk/client-auto-scaling";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 
 // Lambda 実行環境では AWS_REGION が自動設定される。ローカルでの静的検証等に備えて
 // フォールバックのみ残し、CFn が渡す REGION env には依存しない。
 const REGION = process.env.AWS_REGION ?? "ap-northeast-1";
 
 const ssmClient = new SSMClient({ region: REGION });
-const autoScalingClient = new AutoScalingClient({ region: REGION });
+const lambdaClient = new LambdaClient({ region: REGION });
 
 // Discord Interaction の type / response type
 const INTERACTION_TYPE_PING = 1;
 const INTERACTION_TYPE_APPLICATION_COMMAND = 2;
 const RESPONSE_TYPE_PONG = 1;
-const RESPONSE_TYPE_CHANNEL_MESSAGE = 4;
+const RESPONSE_TYPE_DEFERRED_MESSAGE = 5;
 
 // SSM から取得した公開鍵をコールドスタート時に1回だけ生成しキャッシュする
 let cachedPublicKey = null;
@@ -108,170 +106,27 @@ function jsonResponse(statusCode, body) {
   };
 }
 
-// 稼働中とみなす ASG ライフサイクル状態。Terminating 系や落ちかけのインスタンスを
-// 「稼働中」と誤判定しないよう、InService と Pending（起動途中）のみを対象にする。
-const RUNNING_LIFECYCLE_STATES = new Set(["Pending", "InService"]);
-
 /**
- * ASG の稼働中（InService / Pending）インスタンスの InstanceId 一覧を返す。
- * 落ちかけ（Terminating 系）のインスタンスは稼働中とみなさない。
- *
- * @param {object} group DescribeAutoScalingGroups で得た1グループ
- * @returns {string[]} 稼働中インスタンスの InstanceId 配列
- */
-function runningInstanceIds(group) {
-  return (group.Instances ?? [])
-    .filter((instance) => RUNNING_LIFECYCLE_STATES.has(instance.LifecycleState))
-    .map((instance) => instance.InstanceId);
-}
-
-/**
- * ASG が「停止中（desired=0 かつ稼働インスタンス無し）」かを判定する。
- *
- * @param {object} group DescribeAutoScalingGroups で得た1グループ
- * @returns {boolean} 停止中なら true
- */
-function isStopped(group) {
-  return group.DesiredCapacity === 0 && runningInstanceIds(group).length === 0;
-}
-
-/**
- * env で指定された ASG の現在状態を取得する。
- *
- * @returns {Promise<object|null>} 対象 ASG。存在しなければ null
- */
-async function describeTargetGroup() {
-  const { AutoScalingGroups } = await autoScalingClient.send(
-    new DescribeAutoScalingGroupsCommand({
-      AutoScalingGroupNames: [process.env.ASG_NAME],
-    })
-  );
-  return AutoScalingGroups?.[0] ?? null;
-}
-
-/**
- * ASG 構成が見つからなかった場合の Discord 応答を返す。
- *
- * @returns {object} type=4 レスポンス
- */
-function groupNotFoundResponse() {
-  return jsonResponse(200, {
-    type: RESPONSE_TYPE_CHANNEL_MESSAGE,
-    data: { content: "⚠️ サーバー構成が見つかりませんでした。管理者に連絡してください。" },
-  });
-}
-
-/**
- * desired=1 を設定して ASG にインスタンスを起動させる。
- *
- * @returns {Promise<void>}
- */
-async function startDesiredCapacity() {
-  await autoScalingClient.send(
-    new SetDesiredCapacityCommand({
-      AutoScalingGroupName: process.env.ASG_NAME,
-      DesiredCapacity: 1,
-      HonorCooldown: false,
-    })
-  );
-}
-
-/**
- * `/start` コマンドを処理する。停止中なら desired=1 にして起動を開始する。
- *
- * @returns {Promise<object>} Discord へ返す type=4 レスポンス
- */
-async function handleStartCommand() {
-  const group = await describeTargetGroup();
-  if (!group) {
-    return groupNotFoundResponse();
-  }
-
-  if (!isStopped(group)) {
-    return jsonResponse(200, {
-      type: RESPONSE_TYPE_CHANNEL_MESSAGE,
-      data: { content: "🟡 既に起動中です（または起動済み）。" },
-    });
-  }
-
-  await startDesiredCapacity();
-
-  return jsonResponse(200, {
-    type: RESPONSE_TYPE_CHANNEL_MESSAGE,
-    data: {
-      content:
-        "🟢 起動を開始しました。接続可能まで数分かかります。完了したら通知します。",
-    },
-  });
-}
-
-/**
- * `/restart` コマンドを処理する。MOD 更新（S3 world/）を取り込み直すため
- * 稼働インスタンスを作り直す。
- *   - 稼働中: 稼働インスタンスを ASG から終了する（desired は維持＝ASGが新インスタンスを起動）。
- *             新インスタンスは UserData で S3 最新の MOD 構成を取り込んで起動する。
- *   - 停止中: desired=1 で起動する（結果的に最新 MOD 構成で起動する）。
- *
- * @returns {Promise<object>} Discord へ返す type=4 レスポンス
- */
-async function handleRestartCommand() {
-  const group = await describeTargetGroup();
-  if (!group) {
-    return groupNotFoundResponse();
-  }
-
-  const instanceIds = runningInstanceIds(group);
-  if (instanceIds.length === 0) {
-    await startDesiredCapacity();
-    return jsonResponse(200, {
-      type: RESPONSE_TYPE_CHANNEL_MESSAGE,
-      data: {
-        content:
-          "🟢 停止中だったため起動を開始しました（最新MOD構成・数分かかります）。",
-      },
-    });
-  }
-
-  // desired は維持したままインスタンスのみ終了させ、ASG に新インスタンスを起動させる。
-  // 通常は1台だが、想定外に複数稼働していても全て作り直す。
-  await Promise.all(
-    instanceIds.map((instanceId) =>
-      autoScalingClient.send(
-        new TerminateInstanceInAutoScalingGroupCommand({
-          InstanceId: instanceId,
-          ShouldDecrementDesiredCapacity: false,
-        })
-      )
-    )
-  );
-
-  return jsonResponse(200, {
-    type: RESPONSE_TYPE_CHANNEL_MESSAGE,
-    data: {
-      content:
-        "🔄 再起動を開始しました。最新のMOD構成で数分後に起動します（接続中の方は一旦切断されます）。",
-    },
-  });
-}
-
-/**
- * APPLICATION_COMMAND をコマンド名で対応するハンドラへ振り分ける。
+ * 重い処理（ASG 操作 + followup）を worker Lambda へ非同期 invoke する。
+ * InvocationType=Event で投げっぱなしにし、結果は worker 側が followup で伝える。
  *
  * @param {object} interaction Discord Interaction オブジェクト
- * @returns {Promise<object>} Discord へ返す type=4 レスポンス
+ * @returns {Promise<void>}
  */
-function handleApplicationCommand(interaction) {
-  switch (interaction.data?.name) {
-    case "start":
-      return handleStartCommand();
-    case "restart":
-      return handleRestartCommand();
-    default:
-      return jsonResponse(200, {
-        type: RESPONSE_TYPE_CHANNEL_MESSAGE,
-        data: { content: "未対応のコマンドです。" },
-      });
-  }
+async function invokeWorker(interaction) {
+  await lambdaClient.send(
+    new InvokeCommand({
+      FunctionName: process.env.WORKER_FUNCTION_NAME,
+      InvocationType: "Event",
+      Payload: Buffer.from(
+        JSON.stringify({
+          commandName: interaction.data?.name,
+          token: interaction.token,
+          applicationId: interaction.application_id,
+        })
+      ),
+    })
+  );
 }
 
 /**
@@ -302,11 +157,10 @@ export const handler = async (event) => {
   }
 
   if (interaction.type === INTERACTION_TYPE_APPLICATION_COMMAND) {
-    return handleApplicationCommand(interaction);
+    // worker へ重い処理を委譲し、3秒制限内に deferred 応答を返す。
+    await invokeWorker(interaction);
+    return jsonResponse(200, { type: RESPONSE_TYPE_DEFERRED_MESSAGE });
   }
 
-  return jsonResponse(200, {
-    type: RESPONSE_TYPE_CHANNEL_MESSAGE,
-    data: { content: "未対応の操作です。" },
-  });
+  return jsonResponse(200, { type: RESPONSE_TYPE_DEFERRED_MESSAGE });
 };

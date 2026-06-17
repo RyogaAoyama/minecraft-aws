@@ -18,6 +18,8 @@ set -euo pipefail
 source /etc/minecraft.env
 # shellcheck source=mc-rcon.sh
 source "$(dirname "$0")/mc-rcon.sh"
+# shellcheck source=mc-notify.sh
+source "$(dirname "$0")/mc-notify.sh"
 
 SCRIPT_DIR="$(dirname "$0")"
 COUNTER_FILE="/var/lib/minecraft/idle_count"
@@ -75,6 +77,9 @@ if [ -z "$INSTANCE_ID" ]; then
     echo "warn: could not resolve self instance-id; skip termination this cycle"
     exit 0
 fi
+
+# terminate するとインスタンスが落ちて通知できなくなるため、終了 API 呼び出しの前に通知する。
+mc_notify "💤 10分間プレイヤーがいなかったため、ワールドを保存してサーバーを停止しました。"
 
 aws autoscaling terminate-instance-in-auto-scaling-group \
     --region "$AWS_REGION" \

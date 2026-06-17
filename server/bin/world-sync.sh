@@ -14,8 +14,9 @@
 # world 破壊リスクへの対策:
 #   - --delete は RCON save-all flush が成功した時（=ローカルが完全な状態）のみ付ける。
 #     RCON 不通時は不完全なローカルで S3 を上書き/削除しないよう --delete なしで同期する。
-#   - 「真の保管庫」の不変資産（mods/ libraries/ *.jar）は人が手動管理するため、
-#     マシンからの逆同期(ローカル→S3)では除外し、書き戻すのはセーブデータ(world*等)に限定する。
+#   - mods/ は CI が world/ に置く正本のため、マシンからの逆同期(ローカル→S3)では除外する。
+#   - 反対に libraries/ と vanilla server.jar は launcher が自己DLする＝手動管理外なので、
+#     S3 に永続化して次回起動時の外部再DL(server.jar ~150MB 等)を避け起動を高速化する。
 #   - level.dat の存在を最低限ガードし、空/壊れたローカルで保管庫を上書きしない。
 
 set -euo pipefail
@@ -57,7 +58,9 @@ fi
 
 # ローカル → S3 への差分同期。
 #   - 除外: ログ類は保管庫に含めない。
-#   - 除外: mods/ libraries/ *.jar は人が手動管理する不変資産のため逆同期しない。
+#   - 除外: mods/ は CI が world/ に置く正本のため逆同期しない。
+#   - 含める: libraries/ と vanilla server.jar は launcher が自己DLする手動管理外資産なので、
+#            S3 に永続化して次回起動時の外部再DLを避ける（launcher は既存ファイルがあれば再DLをスキップ）。
 # --delete は RCON flush 成功時のみ付与する（不完全ローカルでの S3 削除を避ける）。
 DELETE_FLAG=()
 if [ "$RCON_HELD" -eq 1 ]; then
@@ -71,9 +74,7 @@ aws s3 sync "$MC_DIR/server/" "s3://$WORLD_BUCKET/world/" \
     "${DELETE_FLAG[@]}" \
     --exclude "logs/*" \
     --exclude "*.log" \
-    --exclude "mods/*" \
-    --exclude "libraries/*" \
-    --exclude "*.jar"
+    --exclude "mods/*"
 
 # save-off していた場合のみ save-on で戻す。
 if [ "$RCON_HELD" -eq 1 ]; then
