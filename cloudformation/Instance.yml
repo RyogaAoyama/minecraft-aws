@@ -75,7 +75,8 @@ Resources:
                 AWS_REGION=${AwsRegion}
                 WORLD_BUCKET=${ProductName}-world-${Env}
                 ASG_NAME=${ProductName}-asg-${Env}
-                EIP_ALLOCATION_ID=${EipAllocationId}
+                DUCKDNS_DOMAIN_SSM=DUCKDNS_DOMAIN
+                DUCKDNS_TOKEN_SSM=DUCKDNS_TOKEN
                 MC_DIR=/opt/minecraft
                 RCON_PORT=25575
                 RCON_PASSWORD_SSM=RCON_PASSWORD
@@ -97,8 +98,7 @@ Resources:
 
                 # セットアップ本体（依存導入・systemd配置・スクリプト最終配置・起動）を実行
                 bash /opt/minecraft/bootstrap/install.sh
-              - EipAllocationId:
-                  Fn::ImportValue: !Sub ${ProductName}-eip-allocation-id
+              - {}
       TagSpecifications:
         - ResourceType: launch-template
           Tags:

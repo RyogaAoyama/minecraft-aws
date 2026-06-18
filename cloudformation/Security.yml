@@ -88,14 +88,6 @@ Resources:
                   - autoscaling:TerminateInstanceInAutoScalingGroup
                   - autoscaling:DescribeAutoScalingGroups
                 Resource: "*"
-              # EIP: 関連付け / 解除 / 確認
-              - Sid: ElasticIpAssociate
-                Effect: Allow
-                Action:
-                  - ec2:AssociateAddress
-                  - ec2:DisassociateAddress
-                  - ec2:DescribeAddresses
-                Resource: "*"
               # CloudWatch Agent: メトリクス送信
               - Sid: CloudWatchPutMetric
                 Effect: Allow
@@ -111,6 +103,8 @@ Resources:
                 Resource:
                   - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/RCON_PASSWORD
                   - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DISCORD_WEBHOOK
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DUCKDNS_DOMAIN
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DUCKDNS_TOKEN
               # SecureString復号（AWS管理キー）
               - Sid: SsmKmsDecrypt
                 Effect: Allow

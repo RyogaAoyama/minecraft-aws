@@ -108,11 +108,11 @@ cp "$CONFIG_SRC/cwagent-config.json" \
     -a fetch-config -m ec2 -s \
     -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
-# EIP 関連付け（リトライ・失敗時通知は associate-eip.sh 側で実装）。
-# EIP 失敗は Webhook 通知で可視化済みなので、ここで止めずサーバー本体の起動は継続する
+# DuckDNS 更新（リトライ・失敗時通知は update-dns.sh 側で実装）。
+# DNS 更新失敗は Webhook 通知で可視化済みなので、ここで止めずサーバー本体の起動は継続する
 # （set -e 下で失敗すると systemd 配置・MC 起動に到達しなくなるのを避ける）。
-echo "associate Elastic IP"
-bash "$BIN_DIR/associate-eip.sh" || true
+echo "update DuckDNS"
+bash "$BIN_DIR/update-dns.sh" || true
 
 #######################################
 # 6. systemd ユニット配置 / 有効化
@@ -131,21 +131,13 @@ systemctl enable --now idle-check.timer
 # 7. 起動完了待ち / Discord 通知
 #######################################
 echo "=== [7/7] wait for server readiness and notify ==="
-# 接続先は EIP を使う。IMDS public-ipv4 は EIP 関連付け直後にラグで旧IPを返すことがあるため、
-# 関連付け対象である EIP の AllocationId から実IPを引く。
-# 取得失敗時は IMDS public-ipv4 にフォールバックし、空の ":25565" 通知にしない。
-PUBLIC_IP="$(aws ec2 describe-addresses \
+# 接続先は DuckDNS ドメインを使う。ドメイン名は SSM から取得する。
+DUCKDNS_DOMAIN="$(aws ssm get-parameter \
     --region "$AWS_REGION" \
-    --allocation-id "$EIP_ALLOCATION_ID" \
-    --query 'Addresses[0].PublicIp' \
-    --output text 2>/dev/null || true)"
-if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
-    echo "warn: failed to resolve EIP from allocation; falling back to IMDS public-ipv4"
-    PUBLIC_IP="$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
-        -H "X-aws-ec2-metadata-token-ttl-seconds: 60" \
-        | { read -r token; curl -sf -H "X-aws-ec2-metadata-token: $token" \
-            "http://169.254.169.254/latest/meta-data/public-ipv4"; } || true)"
-fi
+    --name "$DUCKDNS_DOMAIN_SSM" \
+    --query "Parameter.Value" \
+    --output text)"
+CONNECT_ADDRESS="${DUCKDNS_DOMAIN}.duckdns.org"
 
 # 起動完了は「接続受付可能になった正式な合図」＝サーバーログの `Done (` 出力で判定する。
 # Minecraft サーバーは起動完了時に `Done (X.Xs)! For help, type "help"` を標準出力へ出し、
@@ -178,10 +170,10 @@ if [ "$READY" -eq 1 ]; then
         echo "whitelist players registered"
     fi
 
-    mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${PUBLIC_IP}:25565"
+    mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}:25565"
     echo "server ready; notified Discord"
 else
-    mc_notify "🟠 Minecraftサーバーの起動確認がタイムアウトしました（接続先候補: ${PUBLIC_IP}:25565）。ログを確認してください。"
+    mc_notify "🟠 Minecraftサーバーの起動確認がタイムアウトしました（接続先候補: ${CONNECT_ADDRESS}:25565）。ログを確認してください。"
     echo "warn: readiness check timed out"
 fi
 
