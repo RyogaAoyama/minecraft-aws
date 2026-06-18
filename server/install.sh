@@ -135,6 +135,7 @@ echo "=== [7/7] wait for server readiness and notify ==="
 DUCKDNS_DOMAIN="$(aws ssm get-parameter \
     --region "$AWS_REGION" \
     --name "$DUCKDNS_DOMAIN_SSM" \
+    --with-decryption \
     --query "Parameter.Value" \
     --output text)"
 CONNECT_ADDRESS="${DUCKDNS_DOMAIN}.duckdns.org"

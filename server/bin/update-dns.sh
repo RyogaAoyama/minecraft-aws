@@ -29,6 +29,7 @@ function self_public_ip {
 DUCKDNS_DOMAIN="$(aws ssm get-parameter \
     --region "$AWS_REGION" \
     --name "$DUCKDNS_DOMAIN_SSM" \
+    --with-decryption \
     --query "Parameter.Value" \
     --output text)"
 DUCKDNS_TOKEN="$(aws ssm get-parameter \
