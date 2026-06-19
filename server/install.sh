@@ -138,7 +138,7 @@ DUCKDNS_DOMAIN="$(aws ssm get-parameter \
     --with-decryption \
     --query "Parameter.Value" \
     --output text)"
-CONNECT_ADDRESS="${DUCKDNS_DOMAIN}.duckdns.org"
+CONNECT_ADDRESS="${DUCKDNS_DOMAIN}"
 
 # 起動完了は「接続受付可能になった正式な合図」＝サーバーログの `Done (` 出力で判定する。
 # Minecraft サーバーは起動完了時に `Done (X.Xs)! For help, type "help"` を標準出力へ出し、
@@ -171,10 +171,10 @@ if [ "$READY" -eq 1 ]; then
         echo "whitelist players registered"
     fi
 
-    mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}:25565"
+    mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}"
     echo "server ready; notified Discord"
 else
-    mc_notify "🟠 Minecraftサーバーの起動確認がタイムアウトしました（接続先候補: ${CONNECT_ADDRESS}:25565）。ログを確認してください。"
+    mc_notify "🟠 Minecraftサーバーの起動確認がタイムアウトしました（接続先候補: ${CONNECT_ADDRESS}）。ログを確認してください。"
     echo "warn: readiness check timed out"
 fi
 

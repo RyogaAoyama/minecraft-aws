@@ -40,13 +40,15 @@ DUCKDNS_TOKEN="$(aws ssm get-parameter \
     --output text)"
 
 PUBLIC_IP="$(self_public_ip)"
-echo "updating DuckDNS: ${DUCKDNS_DOMAIN}.duckdns.org -> $PUBLIC_IP"
+# DuckDNS API はサブドメイン部分のみ受け付けるため .duckdns.org を除去する。
+DUCKDNS_SUBDOMAIN="${DUCKDNS_DOMAIN%.duckdns.org}"
+echo "updating DuckDNS: ${DUCKDNS_DOMAIN} -> $PUBLIC_IP"
 
 # 指数バックオフ: 2,4,8,16秒 と待機しながら最大 MAX_ATTEMPTS 回試行する。
 DELAY=2
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     RESPONSE="$(curl -sf \
-        "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip=${PUBLIC_IP}" \
+        "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=${PUBLIC_IP}" \
         2>/dev/null || echo "FAIL")"
 
     if [ "$RESPONSE" = "OK" ]; then
@@ -60,5 +62,5 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
 done
 
 echo "error: DuckDNS update failed after $MAX_ATTEMPTS attempts"
-mc_notify "🔴 DuckDNS の更新に失敗しました（domain: ${DUCKDNS_DOMAIN}.duckdns.org）。ドメイン名での接続ができない可能性があります。"
+mc_notify "🔴 DuckDNS の更新に失敗しました（domain: ${DUCKDNS_DOMAIN}）。ドメイン名での接続ができない可能性があります。"
 exit 1
