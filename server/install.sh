@@ -140,39 +140,16 @@ DUCKDNS_DOMAIN="$(aws ssm get-parameter \
     --output text)"
 CONNECT_ADDRESS="${DUCKDNS_DOMAIN}"
 
-# [DEBUG] minecraft.service の状態を確認
-echo "[DEBUG] minecraft.service status:"
-systemctl status minecraft.service --no-pager 2>&1 || true
-echo "[DEBUG] minecraft.service is-active: $(systemctl is-active minecraft.service 2>&1 || true)"
-
-# [DEBUG] サーバーディレクトリの状態を確認
-echo "[DEBUG] server directory contents:"
-ls -la "$SERVER_DIR/" 2>&1 || true
-echo "[DEBUG] fabric-server-launch.jar exists: $([ -f "$SERVER_DIR/fabric-server-launch.jar" ] && echo yes || echo no)"
-echo "[DEBUG] mods/ contents:"
-ls -la "$SERVER_DIR/mods/" 2>&1 || true
-
 # 起動完了は「接続受付可能になった正式な合図」＝サーバーログの `Done (` 出力で判定する。
 # Minecraft サーバーは起動完了時に `Done (X.Xs)! For help, type "help"` を標準出力へ出し、
 # Type=simple の systemd ユニット配下では journald に記録される。
-# RCON list 応答よりこちらの方が正式な「接続受付可能」の合図であり、初回の重い起動
-# （libraries 再DL + ワールドロード）でも取りこぼさないよう待ち時間を十分に延ばす（5秒×180回＝約15分）。
-# 注: `set -euo pipefail` 下で journalctl|grep の grep 不一致(exit 1)がスクリプトを落とさないよう、
-#     判定は if 条件として扱う（不一致時はそのまま次ループへ進む）。
+# journalctl --grep を使いパイプを避ける（pipefail 下で grep -q へパイプすると
+# journalctl が SIGPIPE(141) で死に、パイプライン全体が非ゼロとなり検出に失敗する）。
 READY=0
-for i in $(seq 1 180); do
-    if journalctl -u minecraft.service --no-pager 2>/dev/null | grep -q "Done ("; then
+for _ in $(seq 1 180); do
+    if journalctl -u minecraft.service --no-pager --grep="Done (" >/dev/null 2>&1; then
         READY=1
-        echo "[DEBUG] server ready detected at iteration $i ($(( i * 5 )) seconds)"
         break
-    fi
-    # 30秒ごと(6回ごと)に状態をログ出力
-    if [ $(( i % 6 )) -eq 0 ]; then
-        echo "[DEBUG] waiting... iteration $i / 180 ($(( i * 5 ))s elapsed)"
-        echo "[DEBUG] minecraft.service is-active: $(systemctl is-active minecraft.service 2>&1 || true)"
-        echo "[DEBUG] journalctl last 5 lines:"
-        journalctl -u minecraft.service --no-pager -n 5 2>&1 || true
-        echo "[DEBUG] ---"
     fi
     sleep 5
 done
@@ -202,10 +179,6 @@ if [ "$READY" -eq 1 ]; then
     mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}"
     echo "server ready; notified Discord"
 else
-    echo "[DEBUG] readiness check timed out. Dumping full minecraft.service log:"
-    journalctl -u minecraft.service --no-pager 2>&1 || true
-    echo "[DEBUG] systemctl status:"
-    systemctl status minecraft.service --no-pager 2>&1 || true
     mc_notify "🟠 Minecraftサーバーの起動確認がタイムアウトしました（接続先候補: ${CONNECT_ADDRESS}）。ログを確認してください。"
     echo "warn: readiness check timed out"
 fi
