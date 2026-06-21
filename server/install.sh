@@ -140,14 +140,13 @@ DUCKDNS_DOMAIN="$(aws ssm get-parameter \
     --output text)"
 CONNECT_ADDRESS="${DUCKDNS_DOMAIN}"
 
-# 起動完了は「接続受付可能になった正式な合図」＝サーバーログの `Done (` 出力で判定する。
-# Minecraft サーバーは起動完了時に `Done (X.Xs)! For help, type "help"` を標準出力へ出し、
-# Type=simple の systemd ユニット配下では journald に記録される。
-# journalctl --grep を使いパイプを避ける（pipefail 下で grep -q へパイプすると
-# journalctl が SIGPIPE(141) で死に、パイプライン全体が非ゼロとなり検出に失敗する）。
+# 起動完了は RCON 接続の成功で判定する。
+# journalctl の "Done (" grep は、journald が起動直後の stdout をキャプチャし損ねる
+# ケースがあり信頼できない。RCON で list が成功すれば接続受付可能。
+# RCON パスワードは Step 4 で取得済みの $RCON_PASSWORD を再利用する。
 READY=0
 for _ in $(seq 1 180); do
-    if journalctl -u minecraft.service --no-pager --grep="Done (" >/dev/null 2>&1; then
+    if MCRCON_PASS="$RCON_PASSWORD" mcrcon -H 127.0.0.1 -P "$RCON_PORT" list >/dev/null 2>&1; then
         READY=1
         break
     fi
