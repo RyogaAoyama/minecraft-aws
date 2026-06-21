@@ -41,11 +41,11 @@ runs:
       shell: bash
       run: ./sh/deploy-cfn-all.sh -e ${{ inputs.env }} -p default
 
-    # Fabric サーバー一式を Java 不要・純ダウンロードで組み立てる（ランチャー curl + mods --frozen）。
+    # Fabric サーバー一式を Java 不要・純ダウンロードで組み立てる。
     # vanilla server / libraries はインスタンス初回起動時にランチャーが自動DLするため CI には不要。
     - name: Build Fabric server (no Java)
       shell: bash
-      run: ./sh/build-server.sh --frozen -o ./my-fabric-server
+      run: ./sh/build-server.sh -o ./my-fabric-server
 
     # world/ へアップロード。--delete は付けない（world/ にはセーブデータが同居するため）。
     # バイナリ/MOD のみ上書き同期する。

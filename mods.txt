@@ -42,11 +42,8 @@ incendium           # ネザーのバイオーム/構造物拡張（Lithostitche
 nullscape           # エンドのバイオーム/地形拡張（Lithostitched 依存）
 
 # --- 構造物・村・建造物 ---
-ct-overhaul-village        # ChoiceTheorem's Overhauled Village: 村の全面刷新
-structory                      # 各バイオームに探索用の小〜中規模構造物を追加
-qraftys-japanese-villages      # qrafty's Japanese Villages: さくらバイオームの村を強化
-qraftys-bamboo-villages        # qrafty's Bamboo Villages: 竹林バイオームの村を強化
-countereds-settlement-roads    # Countered's Settlement Roads: 村の道を改善
+ct-overhaul-village # ChoiceTheorem's Overhauled Village: 村の全面刷新
+structory           # 各バイオームに探索用の小〜中規模構造物を追加
 
 # --- サーバーパフォーマンス最適化 ---
 lithium             # ゲームロジックの汎用最適化（描画に手を入れずサーバーでも有効）
@@ -80,15 +77,14 @@ macaws-furniture         # Macaw's Furniture: 家具
 # --- ゲームプレイ・ユーティリティ（クライアントにも同版が必要） ---
 call-your-horse          # Call Your Horse: どこからでも自分の馬を呼び出す（lib-5555ff 依存）
 kleeslabs                # KleeSlabs: ダブルスラブの片方だけを破壊可能にする
-libertyvillagers         # Liberty's Villagers: 村人の挙動を改善
-sleep-timelapse          # Sleep Timelapse: 睡眠中の時間経過を映画風タイムラプスで表示
 typewriter-daycounter    # Typewriter Day Counter: 経過日数をカウント表示
 easy-mob-spawn-control   # Easy Mob Spawn Control: ゲーム内メニューから湧き率・mob上限を調整
-nofall                   # No Fall: 落下ダメージを無効化
 survival-fly             # Survival Fly: サバイバルモードで飛行可能（balm 依存。全プレイヤーが /flight で使用可）
 
 # 補足:
 #   - Falling Leaves / Particle Tweaks は純粋なクライアント描画系のためサーバーには入れない。
 #   - Bridging Mod / Better Climbing / Jump Over Fences / Sodium Extra はクライアント専用。
 #   - Gallant Tireless Altruist は Forge/NeoForge 専用のため Fabric 環境では導入不可。
+#   - qraftys-japanese-villages / qraftys-bamboo-villages / countereds-settlement-roads /
+#     libertyvillagers / sleep-timelapse / nofall は 1.21.11/Fabric 版が無く導入不可。
 #   - Fantasy's Furniture は 2026-06 時点で 1.21.11/Fabric ビルドが無く導入不可（更新待ち）。
