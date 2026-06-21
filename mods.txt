@@ -37,7 +37,6 @@ lib-5555ff          # Call Your Horse の必須依存ライブラリ
 # --- ワールド生成（バイオーム・地形） ---
 terralith           # バニラ+の地形/バイオーム拡張（Lithostitched 依存）
 wwoo                # William Wythers' Overhauled Overworld: バニラバイオームの全面リワーク（バニラブロックのみ使用）
-tectonic            # 地形生成オーバーホール（山・川をダイナミックに）
 incendium           # ネザーのバイオーム/構造物拡張（Lithostitched 依存）
 nullscape           # エンドのバイオーム/地形拡張（Lithostitched 依存）
 
