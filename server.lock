@@ -1,6 +1,6 @@
 # server.lock - build-server.sh が生成（手で編集しない）。Fabric ランチャーの版を固定。
 # 再現ビルド: sh/build-server.sh --frozen -o <出力先>
-game=1.21.10
+game=1.21.11
 loader=0.19.3
 installer=1.1.1
-launcher_sha512=2d06d02d6b9f39debd291d693ce9e983f17b08727f464b6589c1006f2a0474735b66bce0e7331e14a97b54ee071313fd3a1fe4b6bb7d3935dde6744bc479e904
+launcher_sha512=5fb29891f3382ccb9d062a905bb2f474b4360a5fa8e24dccdd95983f4652184bad70a7fdaa5e1fcaabc514cac1ec0c193359efe284683d73f80acde212edd227

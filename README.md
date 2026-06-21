@@ -1,6 +1,6 @@
 # minecraft-aws
 
-Minecraft(Fabric 1.21.10) サーバーを **AWS のスポット EC2 + S3 母艦運用** で構築する IaC 一式です。
+Minecraft(Fabric 1.21.11) サーバーを **AWS のスポット EC2 + S3 母艦運用** で構築する IaC 一式です。
 Discord のスラッシュコマンドで起動し、誰もログインしていなければ自動で停止してコストを抑えます。
 
 ## 特徴

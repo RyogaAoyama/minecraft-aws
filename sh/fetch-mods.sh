@@ -24,7 +24,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 MODRINTH_API="https://api.modrinth.com/v2"
 USER_AGENT="minecraft-aws/1.0 (github)"
-GAME_VERSION="1.21.10"
+GAME_VERSION="1.21.11"
 LOADER="fabric"
 
 # -----------------------------------------------------------------------------
@@ -35,7 +35,7 @@ function usage {
 Usage: $(basename "$0") [OPTION]...
     -o dir       出力ディレクトリ（MOD jar の保存先）。デフォルト ./mods
     -m manifest  宣言ファイル。デフォルト ./mods.txt
-    -g version   対象MCバージョン（デフォルト 1.21.10）
+    -g version   対象MCバージョン（デフォルト 1.21.11）
     -f, --frozen mods.lock のみで再現ダウンロード（mods.txt は読まない）
     -h           ヘルプ
 EOM

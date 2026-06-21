@@ -24,7 +24,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 FABRIC_META="https://meta.fabricmc.net/v2"
 USER_AGENT="minecraft-aws/1.0 (github)"
-GAME_VERSION="1.21.10"
+GAME_VERSION="1.21.11"
 LAUNCHER_NAME="fabric-server-launch.jar"
 
 # -----------------------------------------------------------------------------
@@ -34,7 +34,7 @@ function usage {
     cat <<EOM
 Usage: $(basename "$0") [OPTION]...
     -o dir       出力ディレクトリ（サーバー一式の生成先）。デフォルト ./my-fabric-server
-    -g version   対象MCバージョン（デフォルト 1.21.10）
+    -g version   対象MCバージョン（デフォルト 1.21.11）
     -l version   Fabric loader バージョン（省略時 stable 最新を解決）
     -i version   Fabric installer バージョン（省略時 stable 最新を解決）
     -f, --frozen server.lock のみで再現ビルド（loader/installer を解決しない）
