@@ -171,6 +171,10 @@ if [ "$READY" -eq 1 ]; then
         echo "whitelist players registered"
     fi
 
+    # OP権限付与（プレイヤーがオフラインでも登録可能）。
+    mc_rcon "op arar_arukun" || echo "warn: failed to op arar_arukun"
+    echo "op privileges granted"
+
     mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}"
     echo "server ready; notified Discord"
 else
