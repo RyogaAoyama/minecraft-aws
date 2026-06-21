@@ -33,10 +33,11 @@ cloth-config        # Cloth Config（設定ライブラリ。required 依存。b
 architectury-api    # Architectury API（REI の必須依存）
 balm                # Balm（Survival Fly の必須依存）
 lib-5555ff          # Call Your Horse の必須依存ライブラリ
+glitchcore          # GlitchCore（Biomes O' Plenty の必須依存）
+terrablender        # TerraBlender（Biomes O' Plenty の必須依存）
 
 # --- ワールド生成（バイオーム・地形） ---
-terralith           # バニラ+の地形/バイオーム拡張（Lithostitched 依存）
-wwoo                # William Wythers' Overhauled Overworld: バニラバイオームの全面リワーク（バニラブロックのみ使用）
+biomes-o-plenty     # Biomes O' Plenty: バランスの良いバイオーム追加（GlitchCore/TerraBlender 依存）
 incendium           # ネザーのバイオーム/構造物拡張（Lithostitched 依存）
 nullscape           # エンドのバイオーム/地形拡張（Lithostitched 依存）
 
