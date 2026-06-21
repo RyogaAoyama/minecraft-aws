@@ -98,6 +98,11 @@ chmod 600 "$SERVER_DIR/server.properties"
 
 cp "$CONFIG_SRC/eula.txt" "$SERVER_DIR/eula.txt"
 
+# Tectonic（ワールド生成 MOD）の設定を配置。海と雪原の比率を抑えるチューニング。
+# S3 同期で世界データと共に上書きされる前提だが、初回起動時にも参照されるようリポジトリ管理する。
+mkdir -p "$SERVER_DIR/config"
+cp "$CONFIG_SRC/tectonic.json" "$SERVER_DIR/config/tectonic.json"
+
 #######################################
 # 5. CloudWatch Agent 設定配置 / 起動
 #######################################

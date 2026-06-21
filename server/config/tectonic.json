@@ -1,0 +1,14 @@
+{
+  "_comment": "Tectonic ワールド生成チューニング。海と雪原を抑えて陸地・温帯バイオームを増やす設定。デフォルトとの差分のみ記述する partial config。Tectonic は欠けている項目をデフォルト値で埋める。",
+  "continents": {
+    "_comment": "ocean_offset: 高いほど陸地が増える（デフォルト -0.8 → -0.5 で陸を増やす。-0.2 を超えると海がほぼ消えるので注意）。continents_scale はデフォルト 0.13 のまま。",
+    "ocean_offset": -0.5
+  },
+  "biomes": {
+    "temperature": {
+      "_comment": "offset: 気温の平均をシフト（+0.2 で雪原を減らす）。multiplier: 極端な気候バイオームの出やすさ（1.0 → 0.7 で寒冷・乾燥バイオームを抑える）。",
+      "offset": 0.2,
+      "multiplier": 0.7
+    }
+  }
+}
