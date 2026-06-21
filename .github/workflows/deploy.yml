@@ -14,6 +14,7 @@ on:
       - server.lock
       - .github/workflows/**
       - .github/actions/**
+  workflow_dispatch:
 
 permissions:
   contents: read
