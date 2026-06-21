@@ -175,6 +175,9 @@ if [ "$READY" -eq 1 ]; then
     mc_rcon "op arar_arukun" || echo "warn: failed to op arar_arukun"
     echo "op privileges granted"
 
+    # ゲームルール設定。
+    mc_rcon "gamerule fallDamage false" || echo "warn: failed to set fallDamage"
+
     mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}"
     echo "server ready; notified Discord"
 else
