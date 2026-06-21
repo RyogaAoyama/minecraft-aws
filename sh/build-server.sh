@@ -5,7 +5,7 @@
 # 設計:
 #   - Fabric の起動用ランチャー jar(fabric-server-launch.jar) を meta API から直接 curl で取得する。
 #     インストーラ(Java製)を一切使わない。vanilla server / libraries は「インスタンスの初回起動時」に
-#     ランチャー自身が自動DLする（EC2 には Corretto 21 が入っているため Java はそこで足りる）。
+#     ランチャー自身が自動DLする（EC2 には Corretto 22 が入っているため Java はそこで足りる）。
 #   - mods は fetch-mods.sh --frozen で mods.lock 通りに用意する（冪等・残骸prune込み）。
 #   - 版は pin する: MC=GAME_VERSION、loader/installer は通常モードで stable 最新を解決し
 #     server.lock に固定、--frozen で server.lock から完全再現する（fetch-mods.sh と同じ思想）。
@@ -24,7 +24,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 FABRIC_META="https://meta.fabricmc.net/v2"
 USER_AGENT="minecraft-aws/1.0 (github)"
-GAME_VERSION="1.21.11"
+GAME_VERSION="1.21.10"
 LAUNCHER_NAME="fabric-server-launch.jar"
 
 # -----------------------------------------------------------------------------
@@ -34,7 +34,7 @@ function usage {
     cat <<EOM
 Usage: $(basename "$0") [OPTION]...
     -o dir       出力ディレクトリ（サーバー一式の生成先）。デフォルト ./my-fabric-server
-    -g version   対象MCバージョン（デフォルト 1.21.11）
+    -g version   対象MCバージョン（デフォルト 1.21.10）
     -l version   Fabric loader バージョン（省略時 stable 最新を解決）
     -i version   Fabric installer バージョン（省略時 stable 最新を解決）
     -f, --frozen server.lock のみで再現ビルド（loader/installer を解決しない）

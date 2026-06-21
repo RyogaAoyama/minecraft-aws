@@ -13,7 +13,7 @@
 #   （空行は無視されます）
 #
 # 対象（スクリプトのデフォルトと一致させること。混在は不可）:
-# mc: 1.21.11
+# mc: 1.21.10
 # loader: fabric
 #
 # 注意: ここに列挙するのは「サーバー側に必要な MOD」と「サーバー任意でも入れると
@@ -33,6 +33,7 @@ cloth-config        # Cloth Config（設定ライブラリ。required 依存。b
 architectury-api    # Architectury API（REI の必須依存）
 balm                # Balm（Survival Fly の必須依存）
 lib-5555ff          # Call Your Horse の必須依存ライブラリ
+polymer             # Polymer（Universal Graves の必須依存。polymer-core/resource-pack/virtual-entity を提供）
 
 # --- ワールド生成（バイオーム・地形） ---
 # Terralith と Tectonic の組み合わせは公式に互換が明記されている定番構成。
@@ -50,7 +51,7 @@ roadarchitect       # RoadArchitect: 村と村の間に自動で道を生成
 
 # --- サーバーパフォーマンス最適化 ---
 lithium             # ゲームロジックの汎用最適化（描画に手を入れずサーバーでも有効）
-c2me-fabric         # チャンク生成/IO の並列化（探索・新規地形生成を高速化）
+c2me-fabric         # チャンク生成/IO の並列化（探索・新規地形生成を高速化）。c2me-opts-natives-math が Java 22 を要求するため install.sh は Corretto 22 を入れる
 ferrite-core        # メモリ使用量削減（重複データの共有化）
 chunky              # チャンク事前生成（OW半径3000/ネザー半径1500を事前生成してラグ防止）
 ksyxis              # スポーンチャンクを無効化してサーバー起動・読み込みを高速化
@@ -81,7 +82,7 @@ macaws-furniture         # Macaw's Furniture: 家具
 call-your-horse          # Call Your Horse: どこからでも自分の馬を呼び出す（lib-5555ff 依存）
 kleeslabs                # KleeSlabs: ダブルスラブの片方だけを破壊可能にする
 typewriter-daycounter    # Typewriter Day Counter: 経過日数をカウント表示
-easy-mob-spawn-control   # Easy Mob Spawn Control: ゲーム内メニューから湧き率・mob上限を調整
+# easy-mob-spawn-control は 1.21.10/Fabric 版が無いため一時的に除外（1.21.11/Fabric のみ存在）
 universal-graves         # Universal Graves: 死亡時に墓石を生成しアイテムを保存（サーバー専用）
 survival-fly             # Survival Fly: サバイバルモードで飛行可能（balm 依存。全プレイヤーが /flight で使用可）
 betterdays               # Better Days: 睡眠時のスムーズな時間経過 + 昼夜の長さカスタマイズ
@@ -91,5 +92,5 @@ betterdays               # Better Days: 睡眠時のスムーズな時間経過 
 #   - Bridging Mod / Better Climbing / Jump Over Fences / Sodium Extra はクライアント専用。
 #   - Gallant Tireless Altruist は Forge/NeoForge 専用のため Fabric 環境では導入不可。
 #   - qraftys-japanese-villages / qraftys-bamboo-villages / countereds-settlement-roads /
-#     libertyvillagers / sleep-timelapse / nofall は 1.21.11/Fabric 版が無く導入不可。
-#   - Fantasy's Furniture は 2026-06 時点で 1.21.11/Fabric ビルドが無く導入不可（更新待ち）。
+#     libertyvillagers / sleep-timelapse / nofall は 1.21.10/Fabric 版が無く導入不可。
+#   - Fantasy's Furniture は 2026-06 時点で 1.21.10/Fabric ビルドが無く導入不可（更新待ち）。

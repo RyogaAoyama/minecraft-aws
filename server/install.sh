@@ -50,8 +50,10 @@ chmod +x "$BIN_DIR"/*.sh
 # 2. 依存導入
 #######################################
 echo "=== [2/7] install dependencies ==="
-# Java 21 (Amazon Corretto, arm64 headless)
-dnf install -y java-21-amazon-corretto-headless
+# Java 22 (Amazon Corretto, arm64 headless)。
+# c2me-fabric の内蔵モジュール c2me-opts-natives-math が Java 22 以上を要求するため。
+# AL2023 リポジトリには 22(EOL)〜26 が並んでおり、ここでは c2me が要求する最小の 22 を採用。
+dnf install -y java-22-amazon-corretto-headless
 # CloudWatch Agent
 dnf install -y amazon-cloudwatch-agent
 # mcrcon は AL2023 のリポジトリに無いため、軽量な C 実装(Tiiffi/mcrcon)をソースビルドする。
