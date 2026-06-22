@@ -34,6 +34,7 @@ architectury-api    # Architectury API（REI の必須依存）
 balm                # Balm（Survival Fly の必須依存）
 lib-5555ff          # Call Your Horse の必須依存ライブラリ
 polymer             # Polymer（Universal Graves の必須依存。polymer-core/resource-pack/virtual-entity を提供）
+yacl                # YetAnotherConfigLib v3（Structurify の必須依存。Modrinth 上では server optional だが、Structurify 2.0.25 は yet_another_config_lib_v3 >=3.8.2+1.21.11 を要求し未導入だと起動失敗する）
 
 # --- ワールド生成（バイオーム・地形） ---
 # Terralith と Tectonic の組み合わせは公式に互換が明記されている定番構成。
