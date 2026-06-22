@@ -54,7 +54,7 @@ structurify         # 構造物（村など）の spacing/separation を config 
 lithium             # ゲームロジックの汎用最適化（描画に手を入れずサーバーでも有効）
 c2me-fabric         # チャンク生成/IO の並列化（探索・新規地形生成を高速化）。c2me-opts-natives-math が Java 22 を要求するため install.sh は Corretto 22 を入れる
 ferrite-core        # メモリ使用量削減（重複データの共有化）
-chunky              # チャンク事前生成（OW半径3000/ネザー半径1500を事前生成してラグ防止）
+distanthorizons     # Distant Horizons: LoD で遠景描画。サーバー側に入れるとマルチプレイで生成済み LoD をクライアントへ配信できる。クライアント単体でも動作
 ksyxis              # スポーンチャンクを無効化してサーバー起動・読み込みを高速化
 
 # --- HUD補助（サーバーは任意・クライアント必須） ---

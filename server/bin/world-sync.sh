@@ -15,6 +15,8 @@
 #   - --delete は RCON save-all flush が成功した時（=ローカルが完全な状態）のみ付ける。
 #     RCON 不通時は不完全なローカルで S3 を上書き/削除しないよう --delete なしで同期する。
 #   - mods/ は CI が world/ に置く正本のため、マシンからの逆同期(ローカル→S3)では除外する。
+#   - DistantHorizons の sqlite/WAL/SHM は LoD キャッシュ（クライアント描画用）であり、
+#     消えてもサーバー稼働中に再生成可能 + 巨大化しがちなため逆同期から除外する。
 #   - 反対に libraries/ と vanilla server.jar は launcher が自己DLする＝手動管理外なので、
 #     S3 に永続化して次回起動時の外部再DL(server.jar ~150MB 等)を避け起動を高速化する。
 #   - level.dat の存在を最低限ガードし、空/壊れたローカルで保管庫を上書きしない。
@@ -74,7 +76,8 @@ aws s3 sync "$MC_DIR/server/" "s3://$WORLD_BUCKET/world/" \
     "${DELETE_FLAG[@]}" \
     --exclude "logs/*" \
     --exclude "*.log" \
-    --exclude "mods/*"
+    --exclude "mods/*" \
+    --exclude "*DistantHorizons*"
 
 # save-off していた場合のみ save-on で戻す。
 if [ "$RCON_HELD" -eq 1 ]; then
