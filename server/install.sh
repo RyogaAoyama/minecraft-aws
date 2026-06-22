@@ -105,6 +105,9 @@ cp "$CONFIG_SRC/eula.txt" "$SERVER_DIR/eula.txt"
 mkdir -p "$SERVER_DIR/config"
 cp "$CONFIG_SRC/tectonic.json" "$SERVER_DIR/config/tectonic.json"
 
+# Structurify: 村の spacing を広げて密度を下げる（minecraft:villages の spacing/separation を上書き）。
+cp "$CONFIG_SRC/structurify.json" "$SERVER_DIR/config/structurify.json"
+
 #######################################
 # 5. CloudWatch Agent 設定配置 / 起動
 #######################################

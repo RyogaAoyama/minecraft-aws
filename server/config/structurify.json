@@ -1,0 +1,10 @@
+{
+  "_comment": "Structurify: 村だけ spacing を広げて密度を下げる。バニラの minecraft:villages デフォルトは spacing=34/separation=8。spacing=64 で密度は約 1/3.5（separation は spacing 未満で必要なため 16 に）。他構造物は触らない。",
+  "structure_sets": [
+    {
+      "name": "minecraft:villages",
+      "spacing": 64,
+      "separation": 16
+    }
+  ]
+}
