@@ -191,7 +191,16 @@ Outputs:
     Value: !Ref Vpc
     Export:
       Name: !Sub ${ProductName}-vpc-id
+  # 旧 Export(2サブネット）。CFn は Import 中の Export 値を変更できないため、
+  # 既存の minecraft-ins-prd が参照している間は値を変えず保持する。
+  # 新規参照は下の PublicSubnetIdsAll を使う。
+  # 将来 ins から参照が外れたら、本 Export ごと削除して整理する。
   PublicSubnetIds:
-    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2, !Ref PublicSubnet3]]
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
     Export:
       Name: !Sub ${ProductName}-public-subnet-ids
+  # 新 Export(3サブネット)。ASG の VPCZoneIdentifier はこちらを参照する。
+  PublicSubnetIdsAll:
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2, !Ref PublicSubnet3]]
+    Export:
+      Name: !Sub ${ProductName}-public-subnet-ids-all

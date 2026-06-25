@@ -123,7 +123,7 @@ Resources:
       VPCZoneIdentifier:
         Fn::Split:
           - ","
-          - Fn::ImportValue: !Sub ${ProductName}-public-subnet-ids
+          - Fn::ImportValue: !Sub ${ProductName}-public-subnet-ids-all
       # CapacityRebalance: AWS が中断確率の上昇を検知した時点で
       # rebalance recommendation を出すよう要求する。MaxSize=1 のままでは
       # 自動で予備インスタンスを起動しないが、EventBridge 経由で予兆通知を
