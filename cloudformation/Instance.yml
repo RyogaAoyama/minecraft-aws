@@ -131,9 +131,8 @@ Resources:
             LaunchTemplateId: !Ref McLaunchTemplate
             Version: !GetAtt McLaunchTemplate.LatestVersionNumber
           Overrides:
-            - InstanceType: c6g.xlarge
-            - InstanceType: m6g.xlarge
-            - InstanceType: r6g.xlarge
+            - InstanceType: m6g.large
+            - InstanceType: r6g.large
         InstancesDistribution:
           OnDemandBaseCapacity: 0
           OnDemandPercentageAboveBaseCapacity: 0
