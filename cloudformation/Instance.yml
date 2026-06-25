@@ -13,8 +13,8 @@ Parameters:
     Description: プロダクト名
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
-    Description: AL2023 arm64 の最新AMI（SSM公開パラメータ経由）
+    Default: /minecraft/prd/ami-id
+    Description: 事前焼き込み済みカスタム AMI ID（Image Builder パイプラインが更新する SSM Parameter 経由）
   RootVolumeSize:
     Type: Number
     Default: 30

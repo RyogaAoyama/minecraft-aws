@@ -279,24 +279,49 @@ aws --profile <profile> --region ap-northeast-1 ssm start-session \
 
 ### カスタム AMI（起動時間短縮）
 
-`install.sh` の Step 2（`dnf install java-22 / cwagent` + `mcrcon` ソースビルド）は
+`install.sh` の Step 2（`dnf install java / cwagent` + `mcrcon` ソースビルド）は
 インスタンス起動毎に 1〜2 分かかります。これらを事前に焼き込んだ AMI を作って
-SSM Parameter `/minecraft/prd/ami-id` に登録しておくことで、スポット中断後の復旧時間を短縮できます。
+SSM Parameter `/minecraft/prd/ami-id` に登録しておくことで、スポット中断後の復旧時間を短縮します。
 
-**焼成フロー**: `sh/build-ami.sh` が GitHub Actions の `build-ami` ワークフローから実行されます。
+**実装**: `cloudformation/Image.yml` の EC2 Image Builder パイプライン。
 
-- 起動契機: 月初 1 日 03:00 JST に自動再焼成（AL2023 のセキュリティパッチ追従）
-- 手動実行: GitHub Actions の「build-ami」ワークフローの `Run workflow` ボタン
-- 焼成内容: `java-22-amazon-corretto-headless` / `amazon-cloudwatch-agent` / `mcrcon`
-- AMI ID 反映先: SSM Parameter `/minecraft/prd/ami-id`（無ければ作成、あれば上書き）
-- 古い AMI: 最新 2 個以外は自動で deregister + snapshot 削除
+| リソース | 役割 |
+|---|---|
+| Component | `dnf install java / cwagent / gcc / git` + `mcrcon` ソースビルドの手順。`JavaVersion` パラメータで Java のメジャーバージョンを切替可能 |
+| ImageRecipe | ベース AMI(AL2023 arm64) + Component の組み合わせ |
+| InfrastructureConfiguration | ビルド時の一時 EC2 設定(Subnet / SG / InstanceProfile / InstanceType) |
+| DistributionConfiguration | 焼成完了時に AMI ID を SSM Parameter `/minecraft/prd/ami-id` に書き込む |
+| ImagePipeline | 月次自動実行(月初 1 日 03:00 JST 翌日) + 手動実行サポート |
 
-`install.sh` は Step 2 でバイナリ存在チェックを行い、AMI に既に入っていれば dnf install を
-skip します（カスタム AMI を使っていなくても従来通り動作するフォールバックあり）。
+#### パイプラインの手動実行（即時更新が必要なとき）
 
-> **Instance.yml の AmiId 切替について**: 初回 `build-ami` 実行で SSM Parameter
-> `/minecraft/prd/ami-id` が作成された後、`cloudformation/Instance.yml` の `AmiId` の
-> `Default` を `/minecraft/prd/ami-id` に変更することで、ASG が事前焼き込み AMI を使うようになります。
+```bash
+PIPELINE_ARN=$(aws --profile <profile> --region ap-northeast-1 cloudformation list-exports \
+  --query "Exports[?Name=='minecraft-image-pipeline-arn'].Value" --output text)
+aws --profile <profile> --region ap-northeast-1 imagebuilder start-image-pipeline-execution \
+  --image-pipeline-arn "$PIPELINE_ARN"
+```
+
+完了まで 8〜10 分。AMI ID は `/minecraft/prd/ami-id` に自動反映されます。
+
+#### Instance.yml との接続
+
+`cloudformation/Instance.yml` の `AmiId` パラメータが SSM Parameter `/minecraft/prd/ami-id` を
+参照する設計です（`Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>`）。
+パイプラインが新 AMI ID を書き込むたびに、**次に起動するスポットインスタンスが新 AMI を使用**します
+（既存稼働インスタンスは影響なし）。
+
+#### 初期化
+
+`sh/deploy-cfn-all.sh` の Phase 0 で、`/minecraft/prd/ami-id` が無ければ AL2023 arm64 標準 AMI で
+初期化します。初回デプロイ後、パイプライン手動実行で本来のカスタム AMI に切り替わります。
+
+#### MC バージョンを増やしたいとき（複数 AMI 並行運用）
+
+`Image.yml` の Recipe を 2 種類定義し、それぞれの `JavaVersion` を変えるだけで対応可能です。
+Component は共通利用（parameter で内部の Java バージョンが差し替わる）。
+書き込み先 SSM Parameter を `/minecraft/<env>/ami-id-1.21` / `/minecraft/<env>/ami-id-1.22` 等に分け、
+`Instance.yml` 側で参照する Parameter を切り替えます。
 
 ---
 

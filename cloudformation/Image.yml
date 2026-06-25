@@ -1,0 +1,266 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: minecraft image (EC2 Image Builder pipeline for pre-baked AMI)
+
+###############################
+# パラメーター
+###############################
+Parameters:
+  Env:
+    Type: String
+    Description: 環境種別
+  ProductName:
+    Type: String
+    Description: プロダクト名
+  AwsRegion:
+    Type: String
+    Default: ap-northeast-1
+    Description: 稼働リージョン
+  BaseAmiSsmParameter:
+    Type: String
+    Default: arn:aws:ssm:ap-northeast-1::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: ベース AMI(AL2023 arm64) を解決する SSM パブリックパラメータの ARN
+  TargetAmiSsmParameter:
+    Type: String
+    Default: /minecraft/prd/ami-id
+    Description: 焼成済み AMI ID を書き込む SSM Parameter 名。Instance.yml の AmiId が参照する
+  BuildInstanceType:
+    Type: String
+    Default: c6g.medium
+    Description: ビルド時の一時 EC2 タイプ（数分しか動かないため最小寄り）
+  JavaVersion:
+    Type: String
+    Default: "22"
+    Description: 焼き込む Amazon Corretto Java のメジャーバージョン
+  PipelineScheduleExpression:
+    Type: String
+    Default: cron(0 18 1 * ? *)
+    Description: パイプライン定期実行スケジュール（毎月1日 18:00 UTC ≒ 03:00 JST 翌日）
+
+###############################
+# リソース
+###############################
+Resources:
+  ###############################
+  # IAM
+  ###############################
+  ### ImageBuilderRole ### Image Builder のビルド用 EC2 が assume するロール
+  ImageBuilderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProductName}-imagebuilder-role-${Env}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      # SSM 経由でコマンドを受けるための Core + Image Builder 用
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### ImageBuilderInstanceProfile ### ビルド用 EC2 にアタッチする InstanceProfile
+  ImageBuilderInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${ProductName}-imagebuilder-profile-${Env}
+      Roles:
+        - !Ref ImageBuilderRole
+
+  ###############################
+  # Security Group
+  ###############################
+  ### ImageBuilderSg ### ビルド用 EC2 のアウトバウンドのみ許可（インバウンドなし）
+  ImageBuilderSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProductName}-imagebuilder-sg-${Env}
+      GroupDescription: image builder build security group (egress only)
+      VpcId:
+        Fn::ImportValue: !Sub ${ProductName}-vpc-id
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: allow all egress (dnf install / SSM agent)
+          IpProtocol: "-1"
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProductName}-imagebuilder-sg-${Env}
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ###############################
+  # Image Builder: Component
+  ###############################
+  ### McImageComponent ### install スクリプト（java / cwagent / mcrcon）
+  ### parameters.JavaVersion で Java のメジャーバージョンを差し替え可能にし、
+  ### MC バージョンごとに別 Recipe で値を変えるだけで使い回せるよう設計する。
+  McImageComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${ProductName}-component-${Env}
+      Platform: Linux
+      Version: 1.0.0
+      Description: Install Java / CWAgent / mcrcon for minecraft fabric server
+      Data: |
+        schemaVersion: 1.0
+        parameters:
+          - JavaVersion:
+              type: string
+              default: "22"
+              description: Amazon Corretto Java major version
+        phases:
+          - name: build
+            steps:
+              - name: InstallPackages
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - dnf install -y java-{{ JavaVersion }}-amazon-corretto-headless amazon-cloudwatch-agent gcc git
+              - name: BuildMcrcon
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      set -euo pipefail
+                      BUILD_DIR=$(mktemp -d)
+                      git clone --depth 1 https://github.com/Tiiffi/mcrcon.git "$BUILD_DIR/mcrcon"
+                      gcc -std=gnu11 -O2 -o /usr/local/bin/mcrcon "$BUILD_DIR/mcrcon/mcrcon.c"
+                      chmod +x /usr/local/bin/mcrcon
+                      rm -rf "$BUILD_DIR"
+              - name: Cleanup
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - dnf clean all
+                    - rm -rf /var/cache/dnf
+      Tags:
+        ProductName: !Ref ProductName
+        Env: !Ref Env
+
+  ###############################
+  # Image Builder: Recipe
+  ###############################
+  ### McImageRecipe ### ベース AMI(AL2023 arm64) + Component + ブロックデバイス
+  ### ParentImage に SSM パブリックパラメータの ARN を指定すると、Image Builder が
+  ### パイプライン実行時に最新の AL2023 arm64 AMI を解決してくれる。
+  McImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub ${ProductName}-recipe-${Env}
+      Version: 1.0.0
+      Description: AL2023 arm64 + minecraft runtime dependencies
+      ParentImage: !Ref BaseAmiSsmParameter
+      Components:
+        - ComponentArn: !GetAtt McImageComponent.Arn
+          Parameters:
+            - Name: JavaVersion
+              Value:
+                - !Ref JavaVersion
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+      Tags:
+        ProductName: !Ref ProductName
+        Env: !Ref Env
+
+  ###############################
+  # Image Builder: InfrastructureConfiguration
+  ###############################
+  ### McImageInfrastructure ### ビルド時 EC2 設定（Subnet / SG / InstanceProfile / Type）
+  McImageInfrastructure:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub ${ProductName}-infrastructure-${Env}
+      InstanceProfileName: !Ref ImageBuilderInstanceProfile
+      InstanceTypes:
+        - !Ref BuildInstanceType
+      SubnetId:
+        Fn::Select:
+          - 0
+          - Fn::Split:
+              - ","
+              - Fn::ImportValue: !Sub ${ProductName}-public-subnet-ids-all
+      SecurityGroupIds:
+        - !GetAtt ImageBuilderSg.GroupId
+      TerminateInstanceOnFailure: true
+      Tags:
+        ProductName: !Ref ProductName
+        Env: !Ref Env
+
+  ###############################
+  # Image Builder: DistributionConfiguration
+  ###############################
+  ### McImageDistribution ### AMI 配布設定 + SSM Parameter 自動更新
+  ### SsmParameterConfigurations を入れると、パイプライン完了時に
+  ### 新 AMI ID が ${TargetAmiSsmParameter} に書き込まれる
+  ### （存在しなければ Image Builder が作成する）。Instance.yml は
+  ### このパラメータを参照することで、再デプロイなしで AMI 切替が反映される。
+  McImageDistribution:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: !Sub ${ProductName}-distribution-${Env}
+      Distributions:
+        - Region: !Ref AwsRegion
+          AmiDistributionConfiguration:
+            Name: !Sub "${ProductName}-${Env}-prebaked-{{ imagebuilder:buildDate }}"
+            Description: Pre-baked AMI for minecraft (java / cwagent / mcrcon)
+            AmiTags:
+              ProductName: !Ref ProductName
+              Env: !Ref Env
+              Purpose: prebaked
+          SsmParameterConfigurations:
+            - ParameterName: !Ref TargetAmiSsmParameter
+              AmiAccountId: !Ref AWS::AccountId
+              DataType: aws:ec2:image
+      Tags:
+        ProductName: !Ref ProductName
+        Env: !Ref Env
+
+  ###############################
+  # Image Builder: Pipeline
+  ###############################
+  ### McImagePipeline ### スケジュール実行（月初 1 日 03:00 JST 翌日）
+  ### 手動実行は AWS Console から「Run pipeline」または
+  ### `aws imagebuilder start-image-pipeline-execution --image-pipeline-arn ...`
+  McImagePipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: !Sub ${ProductName}-pipeline-${Env}
+      Description: Pre-baked AMI pipeline for minecraft
+      ImageRecipeArn: !Ref McImageRecipe
+      InfrastructureConfigurationArn: !Ref McImageInfrastructure
+      DistributionConfigurationArn: !Ref McImageDistribution
+      Status: ENABLED
+      Schedule:
+        ScheduleExpression: !Ref PipelineScheduleExpression
+        # 依存パッケージ更新がある場合のみ実行（無駄な月次ビルドを避ける）。
+        # 常に月次実行したい場合は EXPRESSION_MATCH_ONLY に変更する。
+        PipelineExecutionStartCondition: EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE
+      Tags:
+        ProductName: !Ref ProductName
+        Env: !Ref Env
+
+###############################
+# 出力
+###############################
+Outputs:
+  PipelineArn:
+    Value: !GetAtt McImagePipeline.Arn
+    Export:
+      Name: !Sub ${ProductName}-image-pipeline-arn
+  TargetAmiSsmParameter:
+    Value: !Ref TargetAmiSsmParameter
+    Export:
+      Name: !Sub ${ProductName}-target-ami-ssm-parameter

@@ -2,9 +2,11 @@
 
 ### Minecraft on AWS: CloudFormationを依存順に並列デプロイするスクリプト ###
 ### deploy-cfn.sh をラップし、以下の依存グラフで実行する:                   ###
+###   Phase0: SSM Parameter `/minecraft/prd/ami-id` を AL2023 標準で初期化  ###
+###          (既存なら何もしない。Image Builder のパイプライン完了で上書きされる) ###
 ###   Phase1: net                                                          ###
-###   Phase2: sec, rec        (並列 / net 依存)                            ###
-###   Phase3: ins             (net/sec/rec 依存)                           ###
+###   Phase2: sec, rec, img    (並列 / net 依存)                           ###
+###   Phase3: ins             (net/sec/rec/img 依存)                       ###
 ###   Phase4: mon, fnc        (並列 / rec/ins/sec 依存)                    ###
 
 set -euo pipefail
@@ -74,6 +76,27 @@ if ! aws --profile "${PROFILE}" --region "${AWS_REGION}" s3api head-bucket --buc
 fi
 echo "=== Pre-check OK ==="
 
+# Phase 0: Instance.yml が AmiId として参照する SSM Parameter を必ず存在させる。
+# 既存なら一切触らない（Image Builder のパイプライン完了で書き込まれた最新値を保護）。
+# 無ければ AL2023 arm64 標準 AMI の現在値で初期化する。
+echo "--- Phase 0: ensure SSM Parameter /minecraft/prd/ami-id ---"
+if aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm get-parameter \
+    --name /minecraft/prd/ami-id >/dev/null 2>&1; then
+    echo "  /minecraft/prd/ami-id already exists; keep as is"
+else
+    BASE_AMI="$(aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm get-parameter \
+        --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 \
+        --query 'Parameter.Value' --output text)"
+    aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm put-parameter \
+        --name /minecraft/prd/ami-id \
+        --value "${BASE_AMI}" \
+        --type String \
+        --description "Pre-baked AMI for minecraft. Initialized from AL2023 standard. Updated by Image Builder pipeline." \
+        >/dev/null
+    echo "  initialized /minecraft/prd/ami-id = ${BASE_AMI}"
+fi
+echo "--- Phase 0 complete ---"
+
 echo "=== CloudFormation parallel deploy start ==="
 
 # Phase 1: net（基盤VPC。以降の全スタックが依存）
@@ -81,8 +104,8 @@ echo "--- Phase 1: Network ---"
 "${SCRIPT_DIR}/deploy-cfn.sh" -c net -e "${ENV}" -p "${PROFILE}"
 echo "--- Phase 1 complete ---"
 
-# Phase 2: sec と rec を並列実行（ともに net に依存）
-echo "--- Phase 2: Security + Resource (parallel) ---"
+# Phase 2: sec / rec / img を並列実行（いずれも net に依存）
+echo "--- Phase 2: Security + Resource + Image (parallel) ---"
 
 "${SCRIPT_DIR}/deploy-cfn.sh" -c sec -e "${ENV}" -p "${PROFILE}" &
 PID_SEC=$!
@@ -90,18 +113,29 @@ PID_SEC=$!
 "${SCRIPT_DIR}/deploy-cfn.sh" -c rec -e "${ENV}" -p "${PROFILE}" &
 PID_REC=$!
 
+"${SCRIPT_DIR}/deploy-cfn.sh" -c img -e "${ENV}" -p "${PROFILE}" &
+PID_IMG=$!
+
 FAILED=0
 wait ${PID_SEC} || FAILED=1
 if [ ${FAILED} -ne 0 ]; then
     echo "error->Security stack deploy failed"
-    kill ${PID_REC} 2>/dev/null || true
-    wait ${PID_REC} 2>/dev/null || true
+    kill ${PID_REC} ${PID_IMG} 2>/dev/null || true
+    wait ${PID_REC} ${PID_IMG} 2>/dev/null || true
     exit 1
 fi
 
 wait ${PID_REC} || FAILED=1
 if [ ${FAILED} -ne 0 ]; then
     echo "error->Resource stack deploy failed"
+    kill ${PID_IMG} 2>/dev/null || true
+    wait ${PID_IMG} 2>/dev/null || true
+    exit 1
+fi
+
+wait ${PID_IMG} || FAILED=1
+if [ ${FAILED} -ne 0 ]; then
+    echo "error->Image stack deploy failed"
     exit 1
 fi
 echo "--- Phase 2 complete ---"
