@@ -146,7 +146,9 @@ Resources:
         InstancesDistribution:
           OnDemandBaseCapacity: 0
           OnDemandPercentageAboveBaseCapacity: 0
-          SpotAllocationStrategy: capacity-optimized
+          # price-capacity-optimized: 容量に加えて価格も加味するため、安定した
+          # (容量が厚い)プールが選ばれやすく、AWS 公式が中断率改善のため推奨。
+          SpotAllocationStrategy: price-capacity-optimized
       MetricsCollection:
         - Granularity: 1Minute
       Tags:
