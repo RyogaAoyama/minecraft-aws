@@ -75,6 +75,12 @@ Resources:
                 log_phase() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) phase=$1" >> "$TIMING_LOG"; }
                 log_phase userdata-start
 
+                # aws s3 sync の並列度をデフォルト(10)から大幅引き上げ。
+                # MC は world 内に小ファイルが数千件あるため I/O 並列化が効く。
+                # 以降の bootstrap 同期 + install.sh 内の world 同期すべてに有効。
+                aws configure set default.s3.max_concurrent_requests 50
+                aws configure set default.s3.max_queue_size 10000
+
                 # サーバー設定値を /etc/minecraft.env に書き出す（重い処理はinstall.shに委譲）
                 cat <<'ENVEOF' > /etc/minecraft.env
                 AWS_REGION=${AwsRegion}

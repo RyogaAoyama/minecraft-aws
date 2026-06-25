@@ -135,13 +135,14 @@ cp "$CONFIG_SRC/cwagent-config.json" \
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
     -a fetch-config -m ec2 -s \
     -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+log_phase step5a-cwagent-end
 
 # DuckDNS 更新（リトライ・失敗時通知は update-dns.sh 側で実装）。
 # DNS 更新失敗は Webhook 通知で可視化済みなので、ここで止めずサーバー本体の起動は継続する
 # （set -e 下で失敗すると systemd 配置・MC 起動に到達しなくなるのを避ける）。
 echo "update DuckDNS"
 bash "$BIN_DIR/update-dns.sh" || true
-log_phase step5-cwagent-dns-end
+log_phase step5b-dns-end
 
 #######################################
 # 6. systemd ユニット配置 / 有効化
