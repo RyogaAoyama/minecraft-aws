@@ -277,6 +277,29 @@ aws --profile <profile> --region ap-northeast-1 ssm start-session \
 
 ---
 
+### カスタム AMI（起動時間短縮）
+
+`install.sh` の Step 2（`dnf install java-22 / cwagent` + `mcrcon` ソースビルド）は
+インスタンス起動毎に 1〜2 分かかります。これらを事前に焼き込んだ AMI を作って
+SSM Parameter `/minecraft/prd/ami-id` に登録しておくことで、スポット中断後の復旧時間を短縮できます。
+
+**焼成フロー**: `sh/build-ami.sh` が GitHub Actions の `build-ami` ワークフローから実行されます。
+
+- 起動契機: 月初 1 日 03:00 JST に自動再焼成（AL2023 のセキュリティパッチ追従）
+- 手動実行: GitHub Actions の「build-ami」ワークフローの `Run workflow` ボタン
+- 焼成内容: `java-22-amazon-corretto-headless` / `amazon-cloudwatch-agent` / `mcrcon`
+- AMI ID 反映先: SSM Parameter `/minecraft/prd/ami-id`（無ければ作成、あれば上書き）
+- 古い AMI: 最新 2 個以外は自動で deregister + snapshot 削除
+
+`install.sh` は Step 2 でバイナリ存在チェックを行い、AMI に既に入っていれば dnf install を
+skip します（カスタム AMI を使っていなくても従来通り動作するフォールバックあり）。
+
+> **Instance.yml の AmiId 切替について**: 初回 `build-ami` 実行で SSM Parameter
+> `/minecraft/prd/ami-id` が作成された後、`cloudformation/Instance.yml` の `AmiId` の
+> `Default` を `/minecraft/prd/ami-id` に変更することで、ASG が事前焼き込み AMI を使うようになります。
+
+---
+
 ## 既知のリスク / 注意
 
 - **world 肥大時の同期遅延**: ワールドが極端に大きくなると `s3 sync` が

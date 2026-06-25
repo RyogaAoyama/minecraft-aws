@@ -50,14 +50,21 @@ chmod +x "$BIN_DIR"/*.sh
 # 2. 依存導入
 #######################################
 echo "=== [2/7] install dependencies ==="
-# Java 22 (Amazon Corretto, arm64 headless)。
-# c2me-fabric の内蔵モジュール c2me-opts-natives-math が Java 22 以上を要求するため。
-# AL2023 リポジトリには 22(EOL)〜26 が並んでおり、ここでは c2me が要求する最小の 22 を採用。
-dnf install -y java-22-amazon-corretto-headless
-# CloudWatch Agent
-dnf install -y amazon-cloudwatch-agent
-# mcrcon は AL2023 のリポジトリに無いため、軽量な C 実装(Tiiffi/mcrcon)をソースビルドする。
-# 依存は gcc のみ。ビルド済みバイナリは /usr/local/bin に置き PATH を通す。
+# AMI に事前焼き込み済みなら dnf install / ソースビルドを skip する（カスタム AMI 採用時の起動時間短縮）。
+# - Java 22 (Amazon Corretto, arm64 headless): c2me-fabric の c2me-opts-natives-math が Java 22 以上を要求するため
+# - CloudWatch Agent: メトリクス転送
+# - mcrcon: AL2023 リポジトリに無いため Tiiffi/mcrcon を gcc でソースビルド（バイナリは /usr/local/bin に配置）
+PKGS_TO_INSTALL=()
+command -v java >/dev/null 2>&1 \
+    || PKGS_TO_INSTALL+=(java-22-amazon-corretto-headless)
+[ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ] \
+    || PKGS_TO_INSTALL+=(amazon-cloudwatch-agent)
+if [ "${#PKGS_TO_INSTALL[@]}" -gt 0 ]; then
+    echo "installing: ${PKGS_TO_INSTALL[*]}"
+    dnf install -y "${PKGS_TO_INSTALL[@]}"
+else
+    echo "java / cwagent are already present (likely pre-baked AMI); skip dnf install"
+fi
 if ! command -v mcrcon >/dev/null 2>&1; then
     echo "building mcrcon from source"
     dnf install -y gcc git
@@ -66,6 +73,8 @@ if ! command -v mcrcon >/dev/null 2>&1; then
     gcc -std=gnu11 -O2 -o /usr/local/bin/mcrcon "$BUILD_DIR/mcrcon/mcrcon.c"
     chmod +x /usr/local/bin/mcrcon
     rm -rf "$BUILD_DIR"
+else
+    echo "mcrcon already present; skip source build"
 fi
 
 # minecraft 専用ユーザーは作らず root 運用とする。
