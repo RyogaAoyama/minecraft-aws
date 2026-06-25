@@ -23,6 +23,16 @@ Parameters:
     Type: String
     Default: ap-northeast-1
     Description: 稼働リージョン
+  IdleStopMinutes:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    Description: 無人状態が継続したらサーバーを自己終了するまでの分数（idle-check.timer が毎分監視）
+  PlayerIdleTimeoutMinutes:
+    Type: Number
+    Default: 30
+    MinValue: 0
+    Description: AFK プレイヤーをキックするまでの分数（バニラ server.properties の player-idle-timeout）。0 で無効
 
 ###############################
 # リソース
@@ -81,6 +91,8 @@ Resources:
                 RCON_PORT=25575
                 RCON_PASSWORD_SSM=RCON_PASSWORD
                 DISCORD_WEBHOOK_SSM=DISCORD_WEBHOOK
+                IDLE_STOP_MINUTES=${IdleStopMinutes}
+                PLAYER_IDLE_TIMEOUT_MINUTES=${PlayerIdleTimeoutMinutes}
                 ENVEOF
 
                 # bootstrap資材（管理スクリプト/systemdユニット）をS3から取得

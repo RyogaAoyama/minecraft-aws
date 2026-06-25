@@ -5,8 +5,10 @@
 # RCON `list` でオンライン人数を取得し:
 #   - 0人        … 連続カウンタを +1
 #   - 1人以上     … カウンタを 0 にリセット
-# カウンタが IDLE_LIMIT(=10) に達したら（=1分間隔×10=10分連続0人）、
+# カウンタが IDLE_LIMIT に達したら（=1分間隔×IDLE_STOP_MINUTES 分連続0人）、
 # save-and-sync で保存後、自インスタンスを ASG から終了させ desired を 0 に戻す。
+# IDLE_STOP_MINUTES は /etc/minecraft.env から取得（CFn パラメータ IdleStopMinutes 由来）。
+# 未設定時は 10 にフォールバック（旧挙動）。
 #
 # `list` の出力例:
 #   "There are 0 of a max of 10 players online:"
@@ -23,7 +25,7 @@ source "$(dirname "$0")/mc-notify.sh"
 
 SCRIPT_DIR="$(dirname "$0")"
 COUNTER_FILE="/var/lib/minecraft/idle_count"
-IDLE_LIMIT=10
+IDLE_LIMIT="${IDLE_STOP_MINUTES:-10}"
 
 # IMDSv2 で自インスタンスIDを取得する。
 #

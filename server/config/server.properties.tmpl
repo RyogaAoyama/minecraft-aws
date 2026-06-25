@@ -15,6 +15,11 @@ online-mode=true
 # 少人数運用
 max-players=10
 
+# AFK プレイヤーを自動キックするまでの分数。0 で無効。
+# 値は install.sh が /etc/minecraft.env の PLAYER_IDLE_TIMEOUT_MINUTES（CFn パラメータ
+# PlayerIdleTimeoutMinutes 由来）で置換する。
+player-idle-timeout=__PLAYER_IDLE_TIMEOUT__
+
 motd=Minecraft on AWS (spot)
 
 # RCON: アイドル監視/保存制御のためローカル(127.0.0.1)からのみ利用。
