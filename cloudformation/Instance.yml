@@ -11,10 +11,6 @@ Parameters:
   ProductName:
     Type: String
     Description: プロダクト名
-  AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /minecraft/prd/ami-id
-    Description: 事前焼き込み済みカスタム AMI ID（Image Builder パイプラインが更新する SSM Parameter 経由）
   RootVolumeSize:
     Type: Number
     Default: 30
@@ -37,7 +33,10 @@ Resources:
     Properties:
       LaunchTemplateName: !Sub ${ProductName}-lt-${Env}
       LaunchTemplateData:
-        ImageId: !Ref AmiId
+        # AMI は img スタックの EC2 Image Builder が CFn 内で焼成した「事前焼き込み済み AMI」を使う。
+        # img スタックの Outputs(PrebakedAmiId) から ImportValue で直接受け取る。
+        ImageId:
+          Fn::ImportValue: !Sub ${ProductName}-prebaked-ami-id
         IamInstanceProfile:
           Arn:
             Fn::ImportValue: !Sub ${ProductName}-ec2-instance-profile-arn
