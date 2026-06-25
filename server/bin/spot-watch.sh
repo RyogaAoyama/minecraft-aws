@@ -38,7 +38,9 @@ while true; do
         echo "spot interruption notice detected; running save-and-sync"
         bash "$SCRIPT_DIR/save-and-sync.sh"
         # save（データ保護）を済ませてから通知する。
-        mc_notify "⚠️ スポットインスタンスが中断されました。ワールドを保存して停止します。再開するには /start を実行してください。"
+        # ASG の desired は 1 のままなので、EC2 terminate 後に AWS が自動で新インスタンスを
+        # 起動する。/start は不要（手動操作を促すと混乱の元）。
+        mc_notify "⚠️ スポットインスタンスが中断されました。ワールドを保存して停止します。自動で再起動するので数分後に再接続してください。"
         echo "save-and-sync done; spot-watch exiting"
         break
     fi
