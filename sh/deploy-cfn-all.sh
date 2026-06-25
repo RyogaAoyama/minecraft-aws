@@ -77,13 +77,18 @@ fi
 echo "=== Pre-check OK ==="
 
 # Phase 0: Instance.yml が AmiId として参照する SSM Parameter を必ず存在させる。
-# 既存なら一切触らない（Image Builder のパイプライン完了で書き込まれた最新値を保護）。
-# 無ければ AL2023 arm64 標準 AMI の現在値で初期化する。
-echo "--- Phase 0: ensure SSM Parameter /minecraft/prd/ami-id ---"
-if aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm get-parameter \
-    --name /minecraft/prd/ami-id >/dev/null 2>&1; then
-    echo "  /minecraft/prd/ami-id already exists; keep as is"
-else
+# 既存なら値は保持（Image Builder のパイプライン完了で書き込まれた最新値を保護）。
+# ただし DataType は aws:ec2:image でなければならない（Image Builder の DistributionConfiguration
+# が DataType: aws:ec2:image でしか書き込めないため）。text タイプで残っている場合は
+# 既存値を保ったまま delete-parameter → put-parameter で再作成する。
+echo "--- Phase 0: ensure SSM Parameter /minecraft/prd/ami-id (DataType: aws:ec2:image) ---"
+EXISTING_DATA_TYPE="$(aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm get-parameter \
+    --name /minecraft/prd/ami-id --query 'Parameter.DataType' --output text 2>/dev/null || true)"
+case "${EXISTING_DATA_TYPE}" in
+"aws:ec2:image")
+    echo "  /minecraft/prd/ami-id already exists with correct DataType; keep as is"
+    ;;
+"")
     BASE_AMI="$(aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm get-parameter \
         --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 \
         --query 'Parameter.Value' --output text)"
@@ -91,10 +96,27 @@ else
         --name /minecraft/prd/ami-id \
         --value "${BASE_AMI}" \
         --type String \
+        --data-type aws:ec2:image \
         --description "Pre-baked AMI for minecraft. Initialized from AL2023 standard. Updated by Image Builder pipeline." \
         >/dev/null
     echo "  initialized /minecraft/prd/ami-id = ${BASE_AMI}"
-fi
+    ;;
+*)
+    echo "  /minecraft/prd/ami-id exists with DataType=${EXISTING_DATA_TYPE}, recreating as aws:ec2:image"
+    CURRENT_VALUE="$(aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm get-parameter \
+        --name /minecraft/prd/ami-id --query 'Parameter.Value' --output text)"
+    aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm delete-parameter \
+        --name /minecraft/prd/ami-id >/dev/null
+    aws --profile "${PROFILE}" --region "${AWS_REGION}" ssm put-parameter \
+        --name /minecraft/prd/ami-id \
+        --value "${CURRENT_VALUE}" \
+        --type String \
+        --data-type aws:ec2:image \
+        --description "Pre-baked AMI for minecraft. Recreated with DataType=aws:ec2:image. Updated by Image Builder pipeline." \
+        >/dev/null
+    echo "  recreated /minecraft/prd/ami-id = ${CURRENT_VALUE}"
+    ;;
+esac
 echo "--- Phase 0 complete ---"
 
 echo "=== CloudFormation parallel deploy start ==="
