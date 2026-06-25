@@ -110,14 +110,16 @@ Resources:
   ###############################
   # AutoScalingGroup
   ###############################
-  ### McAutoScalingGroup ### min0/max1/desired0。Discord起動でdesired=1
+  ### McAutoScalingGroup ### min0/max1。Discord起動でdesired=1。
+  ### DesiredCapacity は CFn 管理外（プロパティ未指定）にすることで、稼働中
+  ### （desired=1）に CFn 更新が走っても desired=0 に強制リセットされない。
+  ### 初期作成時は MinSize=0 がデフォルトの desired として採用される。
   McAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Sub ${ProductName}-asg-${Env}
       MinSize: "0"
       MaxSize: "1"
-      DesiredCapacity: "0"
       VPCZoneIdentifier:
         Fn::Split:
           - ","
