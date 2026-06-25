@@ -37,6 +37,18 @@ Parameters:
 ###############################
 Resources:
   ###############################
+  # CloudWatch Logs
+  ###############################
+  ### StartupTimingLogGroup ###
+  ### install.sh の各 Step 完了時刻だけを集約するログ。MC ランタイムログや
+  ### cloud-init の全文は転送しない（無駄な転送・保存コストを避ける）。
+  StartupTimingLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /minecraft/startup-timing
+      RetentionInDays: 30
+
+  ###############################
   # CloudWatch Alarm
   ###############################
   ### CpuAlarm ### 15分平均でCPU逼迫を検知（短時間スパイクは無視）

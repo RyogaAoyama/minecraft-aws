@@ -69,6 +69,12 @@ Resources:
                 #!/bin/bash
                 set -euo pipefail
 
+                # 起動時間測定ログ（CWAgent が /minecraft/startup-timing に転送する）。
+                # 起動時間の最適化以外には使わない最小ログ。
+                TIMING_LOG=/var/log/minecraft-startup-timing.log
+                log_phase() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) phase=$1" >> "$TIMING_LOG"; }
+                log_phase userdata-start
+
                 # サーバー設定値を /etc/minecraft.env に書き出す（重い処理はinstall.shに委譲）
                 cat <<'ENVEOF' > /etc/minecraft.env
                 AWS_REGION=${AwsRegion}
@@ -85,6 +91,7 @@ Resources:
                 # bootstrap資材（管理スクリプト/systemdユニット）をS3から取得
                 mkdir -p /opt/minecraft/bootstrap
                 aws s3 sync "s3://${ProductName}-world-${Env}/bootstrap/" /opt/minecraft/bootstrap/ --region "${AwsRegion}"
+                log_phase bootstrap-synced
 
                 # 実行権付与（globミスマッチでUserDataを止めない）
                 chmod +x /opt/minecraft/bootstrap/install.sh /opt/minecraft/bootstrap/bin/*.sh 2>/dev/null || true

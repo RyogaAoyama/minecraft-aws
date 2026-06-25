@@ -94,6 +94,14 @@ Resources:
                 Action:
                   - cloudwatch:PutMetricData
                 Resource: "*"
+              # CloudWatch Logs: 起動時間測定ログ転送（/minecraft/startup-timing 限定）
+              - Sid: CloudWatchLogsStartupTiming
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/minecraft/startup-timing:*
               # SSM Parameter Store: RCON_PASSWORD / DISCORD_WEBHOOK 読み取り
               - Sid: SsmParameterRead
                 Effect: Allow

@@ -23,6 +23,11 @@ set -euo pipefail
 # shellcheck source=/dev/null
 source /etc/minecraft.env
 
+# 起動時間測定ログ（UserData と共有。CWAgent が /minecraft/startup-timing に転送）。
+TIMING_LOG=/var/log/minecraft-startup-timing.log
+log_phase() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) phase=$1" >> "$TIMING_LOG"; }
+log_phase install-sh-start
+
 # このスクリプトが置かれたブートストラップ展開ルート（=/opt/minecraft/bootstrap）。
 BOOTSTRAP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_SRC="$BOOTSTRAP_DIR/bin"
@@ -45,6 +50,7 @@ mkdir -p "$SERVER_DIR" "$BIN_DIR" /var/lib/minecraft
 # （S3は実行権限を保持しないため、配置後に chmod +x する）。
 cp "$BIN_SRC"/*.sh "$BIN_DIR/"
 chmod +x "$BIN_DIR"/*.sh
+log_phase step1-prepare-end
 
 #######################################
 # 2. 依存導入
@@ -76,6 +82,7 @@ if ! command -v mcrcon >/dev/null 2>&1; then
 else
     echo "mcrcon already present; skip source build"
 fi
+log_phase step2-deps-end
 
 # minecraft 専用ユーザーは作らず root 運用とする。
 # 理由: インスタンスは使い捨て・単一用途で、外部公開はゲームポート(25565)のみ。
@@ -86,6 +93,7 @@ fi
 #######################################
 echo "=== [3/7] sync world assets from S3 ==="
 aws s3 sync "s3://$WORLD_BUCKET/world/" "$SERVER_DIR/" --region "$AWS_REGION"
+log_phase step3-world-sync-end
 
 #######################################
 # 4. server.properties / eula.txt 生成
@@ -116,6 +124,7 @@ cp "$CONFIG_SRC/tectonic.json" "$SERVER_DIR/config/tectonic.json"
 
 # Structurify: 村の spacing を広げて密度を下げる（minecraft:villages の spacing/separation を上書き）。
 cp "$CONFIG_SRC/structurify.json" "$SERVER_DIR/config/structurify.json"
+log_phase step4-properties-end
 
 #######################################
 # 5. CloudWatch Agent 設定配置 / 起動
@@ -132,6 +141,7 @@ cp "$CONFIG_SRC/cwagent-config.json" \
 # （set -e 下で失敗すると systemd 配置・MC 起動に到達しなくなるのを避ける）。
 echo "update DuckDNS"
 bash "$BIN_DIR/update-dns.sh" || true
+log_phase step5-cwagent-dns-end
 
 #######################################
 # 6. systemd ユニット配置 / 有効化
@@ -145,6 +155,7 @@ systemctl enable --now minecraft.service
 systemctl enable --now spot-watch.service
 systemctl enable --now world-sync.timer
 systemctl enable --now idle-check.timer
+log_phase step6-systemd-end
 
 #######################################
 # 7. 起動完了待ち / Discord 通知
@@ -171,6 +182,7 @@ for _ in $(seq 1 180); do
     fi
     sleep 5
 done
+log_phase step7-mc-ready
 
 if [ "$READY" -eq 1 ]; then
     # shellcheck source=server/bin/mc-rcon.sh
