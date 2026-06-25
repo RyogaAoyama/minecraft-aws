@@ -15,6 +15,10 @@ Parameters:
     Type: String
     Default: ap-northeast-1
     Description: 稼働リージョン
+  BaseAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: ベース AMI(AL2023 arm64)。CFn デプロイ時に SSM 公開パラメータから解決され、Image Recipe の ParentImage に渡される
   TargetAmiSsmParameter:
     Type: String
     Default: /minecraft/prd/ami-id
@@ -145,18 +149,17 @@ Resources:
   # Image Builder: Recipe
   ###############################
   ### McImageRecipe ### ベース AMI(AL2023 arm64) + Component + ブロックデバイス
-  ### ParentImage に SSM パブリックパラメータの ARN を指定すると、Image Builder が
-  ### パイプライン実行時に最新の AL2023 arm64 AMI を解決してくれる。
-  ### ARN 形式は arn:aws:ssm:<region>:<account-id>:parameter/<name> で、
-  ### AWS パブリックパラメータ(/aws/service/...)であっても account-id は
-  ### 自分のアカウント ID を入れる必要がある（空にすると Image Builder に弾かれる）。
+  ### ParentImage は SSM パブリックパラメータの ARN を直接指定しても Image Builder に
+  ### 弾かれるため（arn:aws:ssm:<region>::parameter/... も <region>:<account>: 形式も拒否）、
+  ### CFn デプロイ時に SSM 公開パラメータを解決して AMI ID(ami-xxx)を取得し、
+  ### その値を ParentImage に渡す。CFn 再デプロイで AL2023 の最新パッチが反映される。
   McImageRecipe:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${ProductName}-recipe-${Env}
       Version: 1.0.0
       Description: AL2023 arm64 + minecraft runtime dependencies
-      ParentImage: !Sub arn:aws:ssm:${AwsRegion}:${AWS::AccountId}:parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+      ParentImage: !Ref BaseAmiId
       Components:
         - ComponentArn: !GetAtt McImageComponent.Arn
           Parameters:
