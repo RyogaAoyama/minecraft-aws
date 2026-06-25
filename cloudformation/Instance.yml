@@ -124,16 +124,25 @@ Resources:
         Fn::Split:
           - ","
           - Fn::ImportValue: !Sub ${ProductName}-public-subnet-ids
-      CapacityRebalance: false
+      # CapacityRebalance: AWS が中断確率の上昇を検知した時点で
+      # rebalance recommendation を出すよう要求する。MaxSize=1 のままでは
+      # 自動で予備インスタンスを起動しないが、EventBridge 経由で予兆通知を
+      # 取れるようになるため、有効化しておく。
+      CapacityRebalance: true
       MixedInstancesPolicy:
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref McLaunchTemplate
             Version: !GetAtt McLaunchTemplate.LatestVersionNumber
+          # Graviton2/3 の 6 候補で容量プールを最大化。
+          # 単一プールが枯渇しても他世代/AZ にフォールバックさせる。
           Overrides:
             - InstanceType: c6g.xlarge
             - InstanceType: m6g.xlarge
             - InstanceType: r6g.xlarge
+            - InstanceType: c7g.xlarge
+            - InstanceType: m7g.xlarge
+            - InstanceType: r7g.xlarge
         InstancesDistribution:
           OnDemandBaseCapacity: 0
           OnDemandPercentageAboveBaseCapacity: 0

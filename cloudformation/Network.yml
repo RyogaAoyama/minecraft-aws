@@ -22,17 +22,25 @@ Parameters:
   PublicSubnet2Cidr:
     Type: String
     Default: 10.0.1.0/24
+    Description: 公開Subnet(AZ-d)のCIDRブロック
+  PublicSubnet3Cidr:
+    Type: String
+    Default: 10.0.2.0/24
     Description: 公開Subnet(AZ-c)のCIDRブロック
 
 ###############################
 # マッピング
 ###############################
 Mappings:
-  # ap-northeast-1 のマルチAZ配置（1a / 1c）
+  # ap-northeast-1 のマルチAZ配置（1a / 1d / 1c）。
+  # !GetAZs は AZ name 昇順（1a→1c→1d）で返るため index 0=1a, 1=1c, 2=1d。
+  # Spot 中断率はプール（AZ x InstanceType）単位で偏るため、3 AZ 揃えて
+  # capacity-optimized が選択肢を広く取れるようにする。
   AvailabilityZone:
     Index:
       First: 0
       Second: 2
+      Third: 1
 
 ###############################
 # リソース
@@ -97,7 +105,7 @@ Resources:
         - Key: Env
           Value: !Ref Env
 
-  ### PublicSubnet2 (ap-northeast-1c) ###
+  ### PublicSubnet2 (ap-northeast-1d) ###
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -108,6 +116,22 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${ProductName}-public-subnet-2-${Env}
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
+  ### PublicSubnet3 (ap-northeast-1c) ###
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnet3Cidr
+      AvailabilityZone: !Select [!FindInMap [AvailabilityZone, Index, Third], !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProductName}-public-subnet-3-${Env}
         - Key: ProductName
           Value: !Ref ProductName
         - Key: Env
@@ -152,6 +176,13 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet2
 
+  ### PublicSubnet3RouteTableAssociation ###
+  PublicSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet3
+
 ###############################
 # 出力
 ###############################
@@ -161,6 +192,6 @@ Outputs:
     Export:
       Name: !Sub ${ProductName}-vpc-id
   PublicSubnetIds:
-    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2, !Ref PublicSubnet3]]
     Export:
       Name: !Sub ${ProductName}-public-subnet-ids
