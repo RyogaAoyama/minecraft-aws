@@ -92,11 +92,9 @@ RCON_PASSWORD="$(aws ssm get-parameter \
     --query "Parameter.Value" \
     --output text)"
 
-# テンプレ内の __RCON_PASSWORD__ / __RCON_PORT__ / __PLAYER_IDLE_TIMEOUT__ を実値へ置換して配置。
-# PLAYER_IDLE_TIMEOUT_MINUTES は /etc/minecraft.env 経由で CFn パラメータから渡る（0 で無効）。
+# テンプレ内の __RCON_PASSWORD__ / __RCON_PORT__ を実値へ置換して配置。
 sed -e "s|__RCON_PASSWORD__|${RCON_PASSWORD}|g" \
     -e "s|__RCON_PORT__|${RCON_PORT}|g" \
-    -e "s|__PLAYER_IDLE_TIMEOUT__|${PLAYER_IDLE_TIMEOUT_MINUTES:-0}|g" \
     "$CONFIG_SRC/server.properties.tmpl" > "$SERVER_DIR/server.properties"
 chmod 600 "$SERVER_DIR/server.properties"
 
