@@ -1,9 +1,9 @@
 {
   "name": "minecraft-alarm-notify",
   "version": "1.0.0",
-  "description": "Forwards CloudWatch Alarms and spot launch failures to a Discord webhook.",
+  "description": "Forwards CloudWatch Alarms, spot launch failures, and spot interruption warnings to a Discord webhook; persists interruption snapshots to S3.",
   "type": "module",
   "main": "index.mjs",
   "private": true,
-  "comment": "AWS SDK v3 (@aws-sdk/client-ssm) と fetch は nodejs24.x ランタイムに同梱されるため dependencies には記載しない。"
+  "comment": "AWS SDK v3 (@aws-sdk/client-ssm, @aws-sdk/client-s3) と fetch は nodejs24.x ランタイムに同梱されるため dependencies には記載しない。"
 }

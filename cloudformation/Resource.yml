@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: minecraft resource (world S3 bucket / Elastic IP / alarm SNS topic)
+Description: minecraft resource (world S3 bucket / ops-logs S3 bucket / alarm SNS topic)
 
 ###############################
 # パラメーター
@@ -57,6 +57,28 @@ Resources:
         - Key: Env
           Value: !Ref Env
 
+  ### OpsLogsBucket ### 運用ログ(Spot 中断ログ等)の永続保管庫。バージョニング/ライフサイクルなし
+  OpsLogsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub ${ProductName}-ops-logs-${Env}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: ProductName
+          Value: !Ref ProductName
+        - Key: Env
+          Value: !Ref Env
+
   ###############################
   # SNS
   ###############################
@@ -79,6 +101,10 @@ Outputs:
     Value: !Ref WorldBucket
     Export:
       Name: !Sub ${ProductName}-world-bucket-name
+  OpsLogsBucketName:
+    Value: !Ref OpsLogsBucket
+    Export:
+      Name: !Sub ${ProductName}-ops-logs-bucket-name
   AlarmTopicArn:
     Value: !Ref AlarmTopic
     Export:

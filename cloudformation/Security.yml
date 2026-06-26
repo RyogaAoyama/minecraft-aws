@@ -260,6 +260,12 @@ Resources:
                 Condition:
                   StringEquals:
                     kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+              # Spot 中断ログ保存先(ops-logs バケット配下の spot-interruptions プレフィックス限定)
+              - Sid: OpsLogsPutInterruptions
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub arn:aws:s3:::${ProductName}-ops-logs-${Env}/spot-interruptions/*
               # Lambda基本実行（CloudWatch Logs）
               - Sid: LambdaLogs
                 Effect: Allow

@@ -95,7 +95,7 @@ Resources:
   ###############################
   # Alarm Notify Lambda
   ###############################
-  ### AlarmNotifyFunction ### SNS/EventBridge → Discord Webhook 通知
+  ### AlarmNotifyFunction ### SNS/EventBridge → Discord Webhook 通知 + Spot 中断時に Advisor JSON を S3 へ永続保存
   AlarmNotifyFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -110,6 +110,8 @@ Resources:
       Environment:
         Variables:
           DISCORD_WEBHOOK_SSM: DISCORD_WEBHOOK
+          OPS_LOGS_BUCKET:
+            Fn::ImportValue: !Sub ${ProductName}-ops-logs-bucket-name
       Tags:
         - Key: ProductName
           Value: !Ref ProductName
@@ -165,6 +167,34 @@ Resources:
       FunctionName: !Ref AlarmNotifyFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt SpotLaunchFailureRule.Arn
+
+  ###############################
+  # EventBridge (スポット中断 2分前通知)
+  ###############################
+  ### SpotInterruptionRule ### EC2 Spot Instance Interruption Warning を AlarmNotifyFunction で受け、S3 へ永続保存する
+  SpotInterruptionRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${ProductName}-spot-interruption-${Env}
+      Description: capture EC2 Spot Instance Interruption Warning and persist to S3
+      EventPattern:
+        source:
+          - aws.ec2
+        detail-type:
+          - EC2 Spot Instance Interruption Warning
+      State: ENABLED
+      Targets:
+        - Id: AlarmNotifyFunction
+          Arn: !GetAtt AlarmNotifyFunction.Arn
+
+  ### SpotInterruptionPermission ### EventBridgeからの起動許可
+  SpotInterruptionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AlarmNotifyFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SpotInterruptionRule.Arn
 
 ###############################
 # 出力
