@@ -127,36 +127,38 @@ cp "$CONFIG_SRC/structurify.json" "$SERVER_DIR/config/structurify.json"
 log_phase step4-properties-end
 
 #######################################
-# 5. CloudWatch Agent 設定配置 / 起動
+# 5. systemd ユニット配置 / MC を先に起動
 #######################################
-echo "=== [5/7] configure and start CloudWatch Agent ==="
+# Step 6 (CWAgent/DuckDNS/その他systemdユニット) を待たずに minecraft.service を起動する。
+# MC のロード(数十秒)中に CWAgent/DuckDNS の数秒を裏で済ませることで、起動の合計時間を短縮する。
+echo "=== [5/7] install systemd units and start minecraft.service (parallel to next step) ==="
+cp "$SYSTEMD_SRC"/*.service "$SYSTEMD_SRC"/*.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now minecraft.service
+log_phase step5-mc-launched
+
+#######################################
+# 6. CloudWatch Agent / DuckDNS / 監視ユニット (MC 起動と並列で実行)
+#######################################
+# MC 起動中の裏で実行するため、ここで失敗してもサーバー本体の起動を止めないこと。
+echo "=== [6/7] configure CWAgent, update DuckDNS, enable watcher units (in parallel to MC boot) ==="
 cp "$CONFIG_SRC/cwagent-config.json" \
     /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
     -a fetch-config -m ec2 -s \
     -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-log_phase step5a-cwagent-end
+log_phase step6a-cwagent-end
 
 # DuckDNS 更新（リトライ・失敗時通知は update-dns.sh 側で実装）。
-# DNS 更新失敗は Webhook 通知で可視化済みなので、ここで止めずサーバー本体の起動は継続する
-# （set -e 下で失敗すると systemd 配置・MC 起動に到達しなくなるのを避ける）。
 echo "update DuckDNS"
 bash "$BIN_DIR/update-dns.sh" || true
-log_phase step5b-dns-end
+log_phase step6b-dns-end
 
-#######################################
-# 6. systemd ユニット配置 / 有効化
-#######################################
-echo "=== [6/7] install and enable systemd units ==="
-cp "$SYSTEMD_SRC"/*.service "$SYSTEMD_SRC"/*.timer /etc/systemd/system/
-systemctl daemon-reload
-
-# 本体サービス + 常駐監視 + 各タイマーを有効化・起動。
-systemctl enable --now minecraft.service
+# 常駐監視 + 各タイマーは MC 起動完了前でも問題ないため、ここで並列に有効化する。
 systemctl enable --now spot-watch.service
 systemctl enable --now world-sync.timer
 systemctl enable --now idle-check.timer
-log_phase step6-systemd-end
+log_phase step6c-watchers-end
 
 #######################################
 # 7. 起動完了待ち / Discord 通知

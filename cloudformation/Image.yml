@@ -36,6 +36,7 @@ Resources:
   # IAM
   ###############################
   ### ImageBuilderRole ### Image Builder のビルド用 EC2 が assume するロール
+  ### world バケットの bootstrap/ を AMI に焼き込むため s3:Get/List を追加する。
   ImageBuilderRole:
     Type: AWS::IAM::Role
     Properties:
@@ -50,6 +51,21 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Policies:
+        - PolicyName: WorldBucketBootstrapRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListBucketForBootstrap
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub arn:aws:s3:::${ProductName}-world-${Env}
+              - Sid: GetBootstrapObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${ProductName}-world-${Env}/bootstrap/*
       Tags:
         - Key: ProductName
           Value: !Ref ProductName
@@ -90,16 +106,20 @@ Resources:
   ###############################
   # Image Builder: Component
   ###############################
-  ### McImageComponent ### install スクリプト（java / cwagent / mcrcon）
+  ### McImageComponent ### install スクリプト（java / cwagent / mcrcon）+ bootstrap 焼き込み。
   ### parameters.JavaVersion で Java のメジャーバージョンを差し替え可能にし、
   ### MC バージョンごとに別 Recipe で値を変えるだけで使い回せるよう設計する。
+  ###
+  ### 1.0.1: S3 の bootstrap/ を /opt/minecraft/bootstrap/ に焼き込み、UserData の S3 同期を不要に。
+  ### 1.0.2: (撤回) world-presync.service と Before=cloud-final.service。実測で逆効果だったため取り消し。
+  ### 1.0.3: world-presync.service の焼き込み・有効化を Component から削除（install.sh が直接 S3 sync する）。
   McImageComponent:
     Type: AWS::ImageBuilder::Component
     Properties:
       Name: !Sub ${ProductName}-component-${Env}
       Platform: Linux
-      Version: 1.0.0
-      Description: Install Java / CWAgent / mcrcon for minecraft fabric server
+      Version: 1.0.3
+      Description: Install Java / CWAgent / mcrcon + bake bootstrap for minecraft fabric server
       Data: |
         schemaVersion: 1.0
         parameters:
@@ -107,6 +127,18 @@ Resources:
               type: string
               default: "22"
               description: Amazon Corretto Java major version
+          - AwsRegion:
+              type: string
+              description: AWS region (used in /etc/minecraft.env and aws s3 sync)
+          - WorldBucket:
+              type: string
+              description: S3 bucket holding world/ and bootstrap/
+          - Env:
+              type: string
+              description: Environment label embedded in /etc/minecraft.env
+          - ProductName:
+              type: string
+              description: Product name embedded in /etc/minecraft.env
         phases:
           - name: build
             steps:
@@ -126,6 +158,53 @@ Resources:
                       gcc -std=gnu11 -O2 -o /usr/local/bin/mcrcon "$BUILD_DIR/mcrcon/mcrcon.c"
                       chmod +x /usr/local/bin/mcrcon
                       rm -rf "$BUILD_DIR"
+              - name: WriteAwsCliConfig
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    # S3 sync を高速化する（UserData / install.sh / world-presync.sh すべてに適用）。
+                    - mkdir -p /root/.aws
+                    - |
+                      cat > /root/.aws/config <<'EOF'
+                      [default]
+                      s3 =
+                          max_concurrent_requests = 50
+                          max_queue_size = 10000
+                      EOF
+              - name: WriteMinecraftEnv
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    # 環境別の固定値を AMI に焼き込む（AMI は環境ごとに焼成されるため）。
+                    - |
+                      cat > /etc/minecraft.env <<'EOF'
+                      AWS_REGION={{ AwsRegion }}
+                      WORLD_BUCKET={{ WorldBucket }}
+                      ASG_NAME={{ ProductName }}-asg-{{ Env }}
+                      DUCKDNS_DOMAIN_SSM=DUCKDNS_DOMAIN
+                      DUCKDNS_TOKEN_SSM=DUCKDNS_TOKEN
+                      MC_DIR=/opt/minecraft
+                      RCON_PORT=25575
+                      RCON_PASSWORD_SSM=RCON_PASSWORD
+                      DISCORD_WEBHOOK_SSM=DISCORD_WEBHOOK
+                      EOF
+              - name: SyncBootstrap
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    # S3 の bootstrap/ を AMI に焼き込み、UserData 側の S3 同期を不要にする。
+                    - mkdir -p /opt/minecraft/bootstrap
+                    - aws s3 sync s3://{{ WorldBucket }}/bootstrap/ /opt/minecraft/bootstrap/ --region {{ AwsRegion }}
+                    - chmod +x /opt/minecraft/bootstrap/install.sh
+                    - chmod +x /opt/minecraft/bootstrap/bin/*.sh
+              - name: DeployBin
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    # 管理スクリプトを最終配置先（/opt/minecraft/bin/）に展開する。
+                    - mkdir -p /opt/minecraft/bin
+                    - cp /opt/minecraft/bootstrap/bin/*.sh /opt/minecraft/bin/
+                    - chmod +x /opt/minecraft/bin/*.sh
               - name: Cleanup
                 action: ExecuteBash
                 inputs:
@@ -147,8 +226,8 @@ Resources:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${ProductName}-recipe-${Env}
-      Version: 1.0.0
-      Description: AL2023 arm64 + minecraft runtime dependencies
+      Version: 1.0.3
+      Description: AL2023 arm64 + minecraft runtime dependencies + baked bootstrap
       ParentImage: !Ref BaseAmiId
       Components:
         - ComponentArn: !GetAtt McImageComponent.Arn
@@ -156,6 +235,18 @@ Resources:
             - Name: JavaVersion
               Value:
                 - !Ref JavaVersion
+            - Name: AwsRegion
+              Value:
+                - !Ref AwsRegion
+            - Name: WorldBucket
+              Value:
+                - !Sub ${ProductName}-world-${Env}
+            - Name: Env
+              Value:
+                - !Ref Env
+            - Name: ProductName
+              Value:
+                - !Ref ProductName
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
@@ -195,8 +286,8 @@ Resources:
   # Image Builder: DistributionConfiguration
   ###############################
   ### McImageDistribution ### AMI 配布設定（同一アカウント・同一リージョンのみ）
-  ### SsmParameterConfigurations は使わない（Instance.yml は CFn Output から
-  ### ImportValue で AMI ID を直接受け取るため）。
+  ### SsmParameterConfigurations は AWSServiceRoleForImageBuilder に ssm:PutParameter が無く使えないため、
+  ### 代わりに AWS::SSM::Parameter リソースで CFn deploy 時に AMI ID を SSM に書き込む。
   McImageDistribution:
     Type: AWS::ImageBuilder::DistributionConfiguration
     Properties:
@@ -210,6 +301,26 @@ Resources:
               ProductName: !Ref ProductName
               Env: !Ref Env
               Purpose: prebaked
+      Tags:
+        ProductName: !Ref ProductName
+        Env: !Ref Env
+
+  ###############################
+  # SSM Parameter（AMI ID 配布用）
+  ###############################
+  ### PrebakedAmiIdParameter ### Instance.yml の LaunchTemplate.ImageId が CFn deploy 時に
+  ### この SSM Parameter を解決して新 AMI ID を取り込む。ImportValue 方式だと AMI 再ベイクで
+  ### Export 値が変わるたびに「Cannot update export ... as it is in use」で詰まるため SSM 経由に統一。
+  ### DataType=aws:ec2:image にしておくと Instance.yml の Parameter::Value<AWS::EC2::Image::Id> から
+  ### 直接解決できる。
+  PrebakedAmiIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${ProductName}/${Env}/prebaked-ami-id
+      Type: String
+      DataType: aws:ec2:image
+      Value: !GetAtt McImage.ImageId
+      Description: Prebaked AMI ID for minecraft fabric server (managed by CFn)
       Tags:
         ProductName: !Ref ProductName
         Env: !Ref Env
@@ -239,8 +350,8 @@ Resources:
 # 出力
 ###############################
 Outputs:
-  # 焼成済み AMI ID。Instance.yml の LaunchTemplate が ImportValue で参照する。
+  # 焼成済み AMI ID（参考表示用）。Instance.yml は SSM Parameter
+  # /minecraft/prd/prebaked-ami-id を Distribution 経由で参照するため Export は持たない。
   PrebakedAmiId:
     Value: !GetAtt McImage.ImageId
-    Export:
-      Name: !Sub ${ProductName}-prebaked-ami-id
+    Description: AMI ID for reference (Instance.yml resolves via SSM Parameter)

@@ -19,6 +19,14 @@ Parameters:
     Type: String
     Default: ap-northeast-1
     Description: 稼働リージョン
+  PrebakedAmiId:
+    # img スタックの Image Builder が SsmParameterConfigurations で書き込む
+    # /minecraft/prd/prebaked-ami-id を CFn deploy 時に解決する。
+    # ImportValue を使うと AMI 再ベイクで Export 値が変わるたびに
+    # 「Cannot update export ... as it is in use」で詰まるため、SSM 経由とする。
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /minecraft/prd/prebaked-ami-id
+    Description: Prebaked AMI ID (resolved from SSM at deploy time)
 
 ###############################
 # リソース
@@ -33,10 +41,9 @@ Resources:
     Properties:
       LaunchTemplateName: !Sub ${ProductName}-lt-${Env}
       LaunchTemplateData:
-        # AMI は img スタックの EC2 Image Builder が CFn 内で焼成した「事前焼き込み済み AMI」を使う。
-        # img スタックの Outputs(PrebakedAmiId) から ImportValue で直接受け取る。
-        ImageId:
-          Fn::ImportValue: !Sub ${ProductName}-prebaked-ami-id
+        # AMI は img スタックの EC2 Image Builder が SSM Parameter
+        # /minecraft/prd/prebaked-ami-id に書き込む値を CFn deploy 時に解決して使う。
+        ImageId: !Ref PrebakedAmiId
         IamInstanceProfile:
           Arn:
             Fn::ImportValue: !Sub ${ProductName}-ec2-instance-profile-arn
@@ -63,54 +70,23 @@ Resources:
               - Key: Env
                 Value: !Ref Env
         UserData:
-          Fn::Base64:
-            Fn::Sub:
-              - |
-                #!/bin/bash
-                set -euo pipefail
+          Fn::Base64: |
+            #!/bin/bash
+            set -euo pipefail
 
-                # 起動時間測定ログ（CWAgent が /minecraft/startup-timing に転送する）。
-                # 起動時間の最適化以外には使わない最小ログ。
-                TIMING_LOG=/var/log/minecraft-startup-timing.log
-                log_phase() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) phase=$1" >> "$TIMING_LOG"; }
-                log_phase userdata-start
+            # 起動時間測定ログ（CWAgent が /minecraft/startup-timing に転送する）。
+            # /etc/minecraft.env / /root/.aws/config / /opt/minecraft/bootstrap/ はすべて AMI に焼き込み済み。
+            TIMING_LOG=/var/log/minecraft-startup-timing.log
+            log_phase() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) phase=$1" >> "$TIMING_LOG"; }
+            log_phase userdata-start
 
-                # aws s3 sync の並列度をデフォルト(10)から大幅引き上げ。
-                # MC は world 内に小ファイルが数千件あるため I/O 並列化が効く。
-                # 以降の bootstrap 同期 + install.sh 内の world 同期すべてに有効。
-                aws configure set default.s3.max_concurrent_requests 50
-                aws configure set default.s3.max_queue_size 10000
+            # AMI バージョン不整合（bootstrap 未焼き込み）の早期検知用ガード。
+            if [ ! -f /opt/minecraft/bootstrap/install.sh ]; then
+              echo "[minecraft-userdata] FATAL: /opt/minecraft/bootstrap/install.sh not found in AMI" | tee -a /var/log/minecraft-userdata.log >&2
+              exit 1
+            fi
 
-                # サーバー設定値を /etc/minecraft.env に書き出す（重い処理はinstall.shに委譲）
-                cat <<'ENVEOF' > /etc/minecraft.env
-                AWS_REGION=${AwsRegion}
-                WORLD_BUCKET=${ProductName}-world-${Env}
-                ASG_NAME=${ProductName}-asg-${Env}
-                DUCKDNS_DOMAIN_SSM=DUCKDNS_DOMAIN
-                DUCKDNS_TOKEN_SSM=DUCKDNS_TOKEN
-                MC_DIR=/opt/minecraft
-                RCON_PORT=25575
-                RCON_PASSWORD_SSM=RCON_PASSWORD
-                DISCORD_WEBHOOK_SSM=DISCORD_WEBHOOK
-                ENVEOF
-
-                # bootstrap資材（管理スクリプト/systemdユニット）をS3から取得
-                mkdir -p /opt/minecraft/bootstrap
-                aws s3 sync "s3://${ProductName}-world-${Env}/bootstrap/" /opt/minecraft/bootstrap/ --region "${AwsRegion}"
-                log_phase bootstrap-synced
-
-                # 実行権付与（globミスマッチでUserDataを止めない）
-                chmod +x /opt/minecraft/bootstrap/install.sh /opt/minecraft/bootstrap/bin/*.sh 2>/dev/null || true
-
-                # install.sh 不在を検知（bootstrap未同期=空のまま無言で止まるのを防ぐ）
-                if [ ! -f /opt/minecraft/bootstrap/install.sh ]; then
-                  echo "[minecraft-userdata] FATAL: /opt/minecraft/bootstrap/install.sh not found. bootstrap may not be synced to s3://${ProductName}-world-${Env}/bootstrap/" | tee -a /var/log/minecraft-userdata.log >&2
-                  exit 1
-                fi
-
-                # セットアップ本体（依存導入・systemd配置・スクリプト最終配置・起動）を実行
-                bash /opt/minecraft/bootstrap/install.sh
-              - {}
+            bash /opt/minecraft/bootstrap/install.sh
       TagSpecifications:
         - ResourceType: launch-template
           Tags:
