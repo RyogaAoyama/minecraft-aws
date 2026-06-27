@@ -57,12 +57,13 @@ log_phase step1-prepare-end
 #######################################
 echo "=== [2/7] install dependencies ==="
 # AMI に事前焼き込み済みなら dnf install / ソースビルドを skip する（カスタム AMI 採用時の起動時間短縮）。
-# - Java 22 (Amazon Corretto, arm64 headless): c2me-fabric の c2me-opts-natives-math が Java 22 以上を要求するため
+# - Java 25 (Amazon Corretto, arm64 headless, LTS): Mojang ランチャー 26.1 が OpenJDK 25 を bundle しており vanilla 公式サポート、
+#   c2me-fabric も CI を openjdk 25 で実施しているため Java 25 を採用する
 # - CloudWatch Agent: メトリクス転送
 # - mcrcon: AL2023 リポジトリに無いため Tiiffi/mcrcon を gcc でソースビルド（バイナリは /usr/local/bin に配置）
 PKGS_TO_INSTALL=()
 command -v java >/dev/null 2>&1 \
-    || PKGS_TO_INSTALL+=(java-22-amazon-corretto-headless)
+    || PKGS_TO_INSTALL+=(java-25-amazon-corretto-headless)
 [ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ] \
     || PKGS_TO_INSTALL+=(amazon-cloudwatch-agent)
 if [ "${#PKGS_TO_INSTALL[@]}" -gt 0 ]; then

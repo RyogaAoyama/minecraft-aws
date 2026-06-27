@@ -25,7 +25,7 @@ Parameters:
     Description: ビルド時の一時 EC2 タイプ（数分しか動かないため最小寄り）
   JavaVersion:
     Type: String
-    Default: "22"
+    Default: "25"
     Description: 焼き込む Amazon Corretto Java のメジャーバージョン
 
 ###############################
@@ -113,19 +113,20 @@ Resources:
   ### 1.0.1: S3 の bootstrap/ を /opt/minecraft/bootstrap/ に焼き込み、UserData の S3 同期を不要に。
   ### 1.0.2: (撤回) world-presync.service と Before=cloud-final.service。実測で逆効果だったため取り消し。
   ### 1.0.3: world-presync.service の焼き込み・有効化を Component から削除（install.sh が直接 S3 sync する）。
+  ### 1.0.4: 焼き込む Corretto を 22 → 25 (LTS) に更新。
   McImageComponent:
     Type: AWS::ImageBuilder::Component
     Properties:
       Name: !Sub ${ProductName}-component-${Env}
       Platform: Linux
-      Version: 1.0.3
+      Version: 1.0.4
       Description: Install Java / CWAgent / mcrcon + bake bootstrap for minecraft fabric server
       Data: |
         schemaVersion: 1.0
         parameters:
           - JavaVersion:
               type: string
-              default: "22"
+              default: "25"
               description: Amazon Corretto Java major version
           - AwsRegion:
               type: string
