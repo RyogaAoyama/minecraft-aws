@@ -227,7 +227,7 @@ Resources:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${ProductName}-recipe-${Env}
-      Version: 1.0.3
+      Version: 1.0.4
       Description: AL2023 arm64 + minecraft runtime dependencies + baked bootstrap
       ParentImage: !Ref BaseAmiId
       Components:
