@@ -85,6 +85,7 @@ kleeslabs                # KleeSlabs: ダブルスラブの片方だけを破壊
 typewriter-daycounter    # Typewriter Day Counter: 経過日数をカウント表示
 easy-mob-spawn-control   # Easy Mob Spawn Control: ゲーム内メニューから湧き率・mob上限を調整
 universal-graves         # Universal Graves: 死亡時に墓石を生成しアイテムを保存（サーバー専用）
+player-locator-plus      # Player Locator Plus: 他プレイヤーの位置を経験値バーに表示（バニラ Locator Bar 拡張。server required / client optional）
 survival-fly             # Survival Fly: サバイバルモードで飛行可能（balm 依存。全プレイヤーが /flight で使用可）
 betterdays               # Better Days: 睡眠時のスムーズな時間経過 + 昼夜の長さカスタマイズ
 fast-leaf-decay          # Fast Leaf Decay: 原木を切った後に残る葉を素早く腐敗させる（サーバー側ロジックのみで動作するためクライアントには不要）
