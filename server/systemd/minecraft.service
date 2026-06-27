@@ -9,26 +9,28 @@ Type=simple
 EnvironmentFile=/etc/minecraft.env
 WorkingDirectory=/opt/minecraft/server
 # Fabric Server Launcher jar は固定名 fabric-server-launch.jar とする（jar名規約。docs参照）。
-# -Xmx6G/-Xms6G は c8g.xlarge(8GB) 前提。Aikar系GCフラグでチャンク生成時の停止を抑える。
+# -Xmx6G/-Xms6G は c8g.xlarge(8GB) 前提。
+# JDK 25 向けチューニング（旧 Aikar G1 系フラグから刷新）:
+#   - UseZGC: Generational ZGC は Java 23+ で ZGC のデフォルト動作、Java 25 で完全安定。
+#     チャンク生成等の長停止 (G1 200ms 目標) を <10ms に抑える。
+#   - UseCompactObjectHeaders (JEP 519, Java 25 stable): オブジェクトヘッダを 12B → 8B に圧縮。
+#     BlockPos/ItemStack/Entity 等の大量小オブジェクトで実効ヒープを 10-15% 節約しキャッシュ効率も改善。
+#   - UseStringDeduplication: ZGC と組み合わせて重複 String の内部 byte[] を共有し追加でヒープ節約
+#     （ブロック ID / NBT キー等が大量に重複するため Minecraft では効きやすい）。
+#   - AlwaysPreTouch: 起動時に全ヒープページを物理割り当てし、運用中のページフォルト遅延を回避。
+#   - UseTransparentHugePages: madvise 経由で 2MB ページを要求し TLB ミスを削減（Linux + AlwaysPreTouch と相性◎）。
+#   - DisableExplicitGC: MOD 由来の System.gc() を無視し ZGC のリズムを乱さない。
+#   - PerfDisableSharedMem: /tmp/hsperfdata の競合を回避。
+# JDK 25 で自動適用される改善（追加フラグ不要）: C2 JIT 最適化, JFR cooperative sampling 等。
 ExecStart=/usr/bin/java \
     -Xmx6G -Xms6G \
-    -XX:+UseG1GC \
-    -XX:+ParallelRefProcEnabled \
-    -XX:MaxGCPauseMillis=200 \
-    -XX:+UnlockExperimentalVMOptions \
+    -XX:+UseZGC \
+    -XX:+UseCompactObjectHeaders \
+    -XX:+UseStringDeduplication \
+    -XX:+AlwaysPreTouch \
+    -XX:+UseTransparentHugePages \
     -XX:+DisableExplicitGC \
-    -XX:G1NewSizePercent=30 \
-    -XX:G1MaxNewSizePercent=40 \
-    -XX:G1HeapRegionSize=8M \
-    -XX:G1ReservePercent=20 \
-    -XX:G1HeapWastePercent=5 \
-    -XX:G1MixedGCCountTarget=4 \
-    -XX:InitiatingHeapOccupancyPercent=15 \
-    -XX:G1MixedGCLiveThresholdPercent=90 \
-    -XX:G1RSetUpdatingPauseTimePercent=5 \
-    -XX:SurvivorRatio=32 \
     -XX:+PerfDisableSharedMem \
-    -XX:MaxTenuringThreshold=1 \
     -jar fabric-server-launch.jar nogui
 # 停止時（OSシャットダウン/ASG終了/スポット中断いずれもACPI停止→systemd停止）に必ずsaveする。
 ExecStop=/opt/minecraft/bin/save-and-sync.sh
