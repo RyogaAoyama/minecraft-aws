@@ -86,6 +86,17 @@ Resources:
               exit 1
             fi
 
+            # AMI 焼き込み後にリポジトリ側の bootstrap が更新されている可能性があるため、
+            # 起動時に S3 から最新を取り込み直す（数十KB / 1-2秒程度のオーバーヘッド）。
+            # これにより install.sh / spot-watch.sh 等の更新が AMI 再ベイクなしで反映される。
+            # /etc/minecraft.env を source して WORLD_BUCKET / AWS_REGION を解決する。
+            # shellcheck source=/dev/null
+            source /etc/minecraft.env
+            aws s3 sync "s3://${WORLD_BUCKET}/bootstrap/" /opt/minecraft/bootstrap/ --region "${AWS_REGION}"
+            chmod +x /opt/minecraft/bootstrap/install.sh
+            chmod +x /opt/minecraft/bootstrap/bin/*.sh
+            log_phase userdata-bootstrap-refresh-end
+
             bash /opt/minecraft/bootstrap/install.sh
       TagSpecifications:
         - ResourceType: launch-template
@@ -98,25 +109,30 @@ Resources:
   ###############################
   # AutoScalingGroup
   ###############################
-  ### McAutoScalingGroup ### min0/max1。Discord起動でdesired=1。
+  ### McAutoScalingGroup ### min0/max2。Discord起動でdesired=1、ハンドオーバー中だけ一時的に 2。
   ### DesiredCapacity は CFn 管理外（プロパティ未指定）にすることで、稼働中
   ### （desired=1）に CFn 更新が走っても desired=0 に強制リセットされない。
   ### 初期作成時は MinSize=0 がデフォルトの desired として採用される。
+  ###
+  ### MaxSize=2 の理由: スポット中断検知時に旧インスタンスの spot-watch が desired=2 にして
+  ### standby を起動させ、ハンドオーバー後に旧が terminate して 1 に戻る運用のため。
   McAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Sub ${ProductName}-asg-${Env}
       MinSize: "0"
-      MaxSize: "1"
+      MaxSize: "2"
       VPCZoneIdentifier:
         Fn::Split:
           - ","
           - Fn::ImportValue: !Sub ${ProductName}-public-subnet-ids-all
-      # CapacityRebalance: AWS が中断確率の上昇を検知した時点で
-      # rebalance recommendation を出すよう要求する。MaxSize=1 のままでは
-      # 自動で予備インスタンスを起動しないが、EventBridge 経由で予兆通知を
-      # 取れるようになるため、有効化しておく。
-      CapacityRebalance: true
+      # CapacityRebalance: false で固定。
+      # 過去 true にしていたが、予兆通知で ASG が予告なくインスタンスを 44 秒程度で
+      # 退役させてしまい、こちらのハンドオーバー orchestration が割り込めない問題があった
+      # （standby 起動・DuckDNS 切替が間に合わず、世界保全タイミングが乱れる）。
+      # 本物の中断通知（PT2M）のみを spot-watch.sh のトリガーにし、それまでは
+      # AWS には介入させない設計に倒す。
+      CapacityRebalance: false
       MixedInstancesPolicy:
         LaunchTemplate:
           LaunchTemplateSpecification:

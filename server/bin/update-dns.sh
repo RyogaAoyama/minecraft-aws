@@ -16,6 +16,23 @@ source "$(dirname "$0")/mc-notify.sh"
 
 MAX_ATTEMPTS=5
 
+# 引数解析:
+#   --ip <addr> ... DuckDNS に書き込む IP を明示指定する。
+#                   省略時は IMDS から自インスタンスの public IP を取得する。
+#                   ハンドオーバー時に旧インスタンスが「新の IP」で DuckDNS を切り替える用途で使う。
+OVERRIDE_IP=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --ip)
+            OVERRIDE_IP="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 # IMDSv2 でパブリック IP を取得する。
 function self_public_ip {
     local token
@@ -39,7 +56,11 @@ DUCKDNS_TOKEN="$(aws ssm get-parameter \
     --query "Parameter.Value" \
     --output text)"
 
-PUBLIC_IP="$(self_public_ip)"
+if [ -n "$OVERRIDE_IP" ]; then
+    PUBLIC_IP="$OVERRIDE_IP"
+else
+    PUBLIC_IP="$(self_public_ip)"
+fi
 # DuckDNS API はサブドメイン部分のみ受け付けるため .duckdns.org を除去する。
 DUCKDNS_SUBDOMAIN="${DUCKDNS_DOMAIN%.duckdns.org}"
 echo "updating DuckDNS: ${DUCKDNS_DOMAIN} -> $PUBLIC_IP"

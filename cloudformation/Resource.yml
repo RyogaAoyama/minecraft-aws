@@ -80,6 +80,31 @@ Resources:
           Value: !Ref Env
 
   ###############################
+  # SSM Parameter (handover orchestration)
+  ###############################
+  ### HandoverStateParam ### 旧/新インスタンス間のハンドオーバー状態フラグ
+  ###   IDLE              ... 平常時
+  ###   STANDBY_REQUESTED ... 旧が中断検知し新の起動を依頼した状態（新インスタンスはこれを見て自分が standby と判定する）
+  ###   STANDBY_READY     ... 新が MC ready になり旧の DuckDNS 切替を待っている状態
+  HandoverStateParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /minecraft/${Env}/handover-state
+      Type: String
+      Value: IDLE
+      Description: handover orchestration state shared between active and standby instances
+
+  ### StandbyIpParam ### 新インスタンスの public IP（DuckDNS 切替時に旧が参照する）
+  ### 値は新インスタンスの install.sh が STANDBY_READY と同時に書き込む。
+  StandbyIpParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /minecraft/${Env}/standby-ip
+      Type: String
+      Value: "0.0.0.0"
+      Description: public IPv4 of the standby instance during handover (set by standby on ready)
+
+  ###############################
   # SNS
   ###############################
   ### AlarmTopic ### CloudWatchアラーム → 通知Lambda の中継トピック

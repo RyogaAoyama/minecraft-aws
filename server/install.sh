@@ -89,6 +89,34 @@ log_phase step2-deps-end
 #       SSH も塞ぎ SSM 運用のため、権限分離より構成の単純さを優先する。
 
 #######################################
+# 2.5. ハンドオーバー standby 判定
+#######################################
+# 旧インスタンスの spot-watch が「中断検知 → SSM /minecraft/prd/handover-state を STANDBY_REQUESTED に書く」
+# 直後にこの新インスタンスが UserData から起動してくる。SSM を見て自分が standby かを判定する。
+#
+# IS_STANDBY=true のとき:
+#   - DuckDNS 更新は skip する（旧が name を持っている状態を奪わない）
+#   - Step 7 で MC ready 確認後、自分の public IP を SSM に書いて handover-state=STANDBY_READY に遷移させる
+# IS_STANDBY=false のとき:
+#   - 通常起動と同じ（DuckDNS 更新あり、ready 通知なし）
+echo "=== [2.5/7] detect handover standby role ==="
+HANDOVER_STATE_PARAM="/minecraft/prd/handover-state"
+STANDBY_IP_PARAM="/minecraft/prd/standby-ip"
+HANDOVER_STATE="$(aws ssm get-parameter \
+    --region "$AWS_REGION" \
+    --name "$HANDOVER_STATE_PARAM" \
+    --query "Parameter.Value" \
+    --output text 2>/dev/null || echo "IDLE")"
+if [ "$HANDOVER_STATE" = "STANDBY_REQUESTED" ]; then
+    IS_STANDBY=true
+    echo "this instance is a STANDBY for handover (handover-state=$HANDOVER_STATE)"
+else
+    IS_STANDBY=false
+    echo "this instance starts as PRIMARY (handover-state=$HANDOVER_STATE)"
+fi
+log_phase step2_5-standby-detect-end
+
+#######################################
 # 3. ワールド資産取得
 #######################################
 echo "=== [3/7] sync world assets from S3 ==="
@@ -150,8 +178,14 @@ cp "$CONFIG_SRC/cwagent-config.json" \
 log_phase step6a-cwagent-end
 
 # DuckDNS 更新（リトライ・失敗時通知は update-dns.sh 側で実装）。
-echo "update DuckDNS"
-bash "$BIN_DIR/update-dns.sh" || true
+# standby のときは旧インスタンスが name を持っているため、ここで奪わない。
+# 旧の spot-watch がハンドオーバー完了時に「新の IP」で DuckDNS を切り替える。
+if [ "$IS_STANDBY" = "false" ]; then
+    echo "update DuckDNS"
+    bash "$BIN_DIR/update-dns.sh" || true
+else
+    echo "skip DuckDNS update (standby; old instance still owns the name)"
+fi
 log_phase step6b-dns-end
 
 # 常駐監視 + 各タイマーは MC 起動完了前でも問題ないため、ここで並列に有効化する。
@@ -209,7 +243,31 @@ if [ "$READY" -eq 1 ]; then
     # ゲームルール設定。
     mc_rcon "gamerule fall_damage false" || echo "warn: failed to set fall_damage"
 
-    mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}"
+    if [ "$IS_STANDBY" = "true" ]; then
+        # standby: 自分の public IP を SSM に書き、ready シグナルを SSM に立てる。
+        # 旧インスタンスの spot-watch が SSM polling して検知 → DuckDNS をこの IP に切替。
+        # （クライアント自動再接続は撤去済。プレイヤーは切断後 Reconnect ボタンで新サーバーへ）
+        SELF_TOKEN="$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
+            -H "X-aws-ec2-metadata-token-ttl-seconds: 60")"
+        SELF_PUBLIC_IP="$(curl -sf -H "X-aws-ec2-metadata-token: $SELF_TOKEN" \
+            "http://169.254.169.254/latest/meta-data/public-ipv4")"
+        aws ssm put-parameter \
+            --region "$AWS_REGION" \
+            --name "$STANDBY_IP_PARAM" \
+            --value "$SELF_PUBLIC_IP" \
+            --type String \
+            --overwrite >/dev/null
+        aws ssm put-parameter \
+            --region "$AWS_REGION" \
+            --name "$HANDOVER_STATE_PARAM" \
+            --value "STANDBY_READY" \
+            --type String \
+            --overwrite >/dev/null
+        echo "signaled STANDBY_READY (ip=$SELF_PUBLIC_IP) to active instance"
+        mc_notify "🟢 ハンドオーバー standby が起動完了。旧サーバーが切替を実行します（接続先: ${CONNECT_ADDRESS}）。"
+    else
+        mc_notify "🟢 Minecraftサーバーが起動しました！ 接続先: ${CONNECT_ADDRESS}"
+    fi
     echo "server ready; notified Discord"
 else
     mc_notify "🟠 Minecraftサーバーの起動確認がタイムアウトしました（接続先候補: ${CONNECT_ADDRESS}）。ログを確認してください。"

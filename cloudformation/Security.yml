@@ -81,12 +81,14 @@ Resources:
                 Action:
                   - s3:ListBucket
                 Resource: !Sub arn:aws:s3:::${ProductName}-world-${Env}
-              # AutoScaling: 自己終了 / 状態確認
+              # AutoScaling: 自己終了 / 状態確認 + ハンドオーバー時の standby 起動依頼
               - Sid: AutoScalingSelfTerminate
                 Effect: Allow
                 Action:
                   - autoscaling:TerminateInstanceInAutoScalingGroup
                   - autoscaling:DescribeAutoScalingGroups
+                  # spot-watch.sh が中断検知時に desired=1->2 で standby を起動する用途
+                  - autoscaling:SetDesiredCapacity
                 Resource: "*"
               # CloudWatch Agent: メトリクス送信
               - Sid: CloudWatchPutMetric
@@ -113,6 +115,16 @@ Resources:
                   - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DISCORD_WEBHOOK
                   - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DUCKDNS_DOMAIN
                   - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DUCKDNS_TOKEN
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft/prd/handover-state
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft/prd/standby-ip
+              # ハンドオーバー orchestration: 旧/新インスタンスが状態を書き換える
+              - Sid: SsmHandoverParameterWrite
+                Effect: Allow
+                Action:
+                  - ssm:PutParameter
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft/prd/handover-state
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft/prd/standby-ip
               # SecureString復号（AWS管理キー）
               - Sid: SsmKmsDecrypt
                 Effect: Allow
