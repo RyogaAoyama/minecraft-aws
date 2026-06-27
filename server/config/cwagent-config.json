@@ -20,13 +20,27 @@
       },
       "disk": {
         "resources": [
-          "/"
+          "/",
+          "/opt/minecraft/server"
         ],
         "measurement": [
           "disk_used_percent"
         ],
         "metrics_collection_interval": 60,
         "drop_device": true
+      },
+      "diskio": {
+        "resources": [
+          "nvme1n1"
+        ],
+        "measurement": [
+          "reads",
+          "writes",
+          "read_bytes",
+          "write_bytes",
+          "iops_in_progress"
+        ],
+        "metrics_collection_interval": 60
       }
     }
   },
