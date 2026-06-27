@@ -96,6 +96,15 @@ Resources:
                 Action:
                   - cloudwatch:PutMetricData
                 Resource: "*"
+              # CloudWatch Agent: append_dimensions の ${aws:AutoScalingGroupName}
+              # を解決するため EC2 タグ参照が必要。これが無いと ec2tagger が
+              # UnauthorizedOperation で初期化リトライを続け mem/disk メトリクスが
+              # 一切 publish されない（observed: 2026-06-27）。
+              - Sid: CloudWatchAgentEc2Tags
+                Effect: Allow
+                Action:
+                  - ec2:DescribeTags
+                Resource: "*"
               # CloudWatch Logs: 起動時間測定ログ転送（/minecraft/startup-timing 限定）
               - Sid: CloudWatchLogsStartupTiming
                 Effect: Allow
