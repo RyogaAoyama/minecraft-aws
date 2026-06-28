@@ -17,18 +17,21 @@ WorkingDirectory=/opt/minecraft/server
 #     BlockPos/ItemStack/Entity 等の大量小オブジェクトで実効ヒープを 10-15% 節約しキャッシュ効率も改善。
 #   - UseStringDeduplication: ZGC と組み合わせて重複 String の内部 byte[] を共有し追加でヒープ節約
 #     （ブロック ID / NBT キー等が大量に重複するため Minecraft では効きやすい）。
-#   - AlwaysPreTouch: 起動時に全ヒープページを物理割り当てし、運用中のページフォルト遅延を回避。
-#   - UseTransparentHugePages: madvise 経由で 2MB ページを要求し TLB ミスを削減（Linux + AlwaysPreTouch と相性◎）。
 #   - DisableExplicitGC: MOD 由来の System.gc() を無視し ZGC のリズムを乱さない。
 #   - PerfDisableSharedMem: /tmp/hsperfdata の競合を回避。
 # JDK 25 で自動適用される改善（追加フラグ不要）: C2 JIT 最適化, JFR cooperative sampling 等。
+#
+# 撤去フラグ:
+#   - AlwaysPreTouch / UseTransparentHugePages の組み合わせは、6GB ヒープに対して
+#     Linux の khugepaged (THP 整列スレッド) が defrag に走り 1 コアを占有 → ページ操作で
+#     待たされた全プロセス (Java / SSM Agent / CWAgent) が同時 hang する事象を実環境で
+#     観測したため撤去。インスタンスは ping 通るがすべての user-space が応答停止する。
+#     ZGC は内部で必要に応じて大ページを扱う設計なので、両フラグなしでも性能影響は微小。
 ExecStart=/usr/bin/java \
     -Xmx6G -Xms6G \
     -XX:+UseZGC \
     -XX:+UseCompactObjectHeaders \
     -XX:+UseStringDeduplication \
-    -XX:+AlwaysPreTouch \
-    -XX:+UseTransparentHugePages \
     -XX:+DisableExplicitGC \
     -XX:+PerfDisableSharedMem \
     -jar fabric-server-launch.jar nogui
