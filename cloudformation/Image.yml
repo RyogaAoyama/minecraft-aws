@@ -23,10 +23,13 @@ Parameters:
     Type: String
     Default: c6g.medium
     Description: ビルド時の一時 EC2 タイプ（数分しか動かないため最小寄り）
-  JavaVersion:
-    Type: String
-    Default: "25"
-    Description: 焼き込む Amazon Corretto Java のメジャーバージョン
+  # 焼き込む Amazon Corretto のメジャーバージョンは、CFn Parameter ではなく
+  # 下記 McImageRecipe.Components.Parameters.JavaVersion で直値固定する。
+  # CFn Parameter 化していた頃、deploy-cfn.sh の --parameter-overrides に
+  # JavaVersion を渡し忘れたまま minecraft.service の JVM フラグだけ Java25 化
+  # した結果、AMI には Java22 が焼かれ続けて起動時に
+  # "Unrecognized VM option 'UseCompactObjectHeaders'" でクラッシュループした
+  # ので、deploy 経路の取り違えで再発しないように Recipe 側で固定する。
 
 ###############################
 # リソース
@@ -113,13 +116,14 @@ Resources:
   ### 1.0.1: S3 の bootstrap/ を /opt/minecraft/bootstrap/ に焼き込み、UserData の S3 同期を不要に。
   ### 1.0.2: (撤回) world-presync.service と Before=cloud-final.service。実測で逆効果だったため取り消し。
   ### 1.0.3: world-presync.service の焼き込み・有効化を Component から削除（install.sh が直接 S3 sync する）。
-  ### 1.0.4: 焼き込む Corretto を 22 → 25 (LTS) に更新。
+  ### 1.0.4: 焼き込む Corretto を 22 → 25 (LTS) に更新（実態は Recipe の JavaVersion 値が CFn Parameter 経由で "22" 固定のままだったため反映されず）。
+  ### 1.0.5: Recipe の JavaVersion を CFn Parameter 解決から直値 "25" に変更し、AMI が確実に Java25 で焼かれるようにする。Component 側のテンプレ機構はそのまま残す。
   McImageComponent:
     Type: AWS::ImageBuilder::Component
     Properties:
       Name: !Sub ${ProductName}-component-${Env}
       Platform: Linux
-      Version: 1.0.4
+      Version: 1.0.5
       Description: Install Java / CWAgent / mcrcon + bake bootstrap for minecraft fabric server
       Data: |
         schemaVersion: 1.0
@@ -227,15 +231,18 @@ Resources:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${ProductName}-recipe-${Env}
-      Version: 1.0.4
+      Version: 1.0.5
       Description: AL2023 arm64 + minecraft runtime dependencies + baked bootstrap
       ParentImage: !Ref BaseAmiId
       Components:
         - ComponentArn: !GetAtt McImageComponent.Arn
           Parameters:
+            # JavaVersion は CFn Parameter 経由ではなく直値で固定する
+            # （Parameters の JavaVersion を撤去した経緯はパラメーター宣言部のコメント参照）。
+            # MC バージョンを上げて Java を切り替えたい時は、ここの値と McImageComponent.Version を bump する。
             - Name: JavaVersion
               Value:
-                - !Ref JavaVersion
+                - "25"
             - Name: AwsRegion
               Value:
                 - !Ref AwsRegion
