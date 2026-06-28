@@ -118,6 +118,36 @@ fi
 log_phase step2_5-standby-detect-end
 
 #######################################
+# 2.6. NVMe instance store マウント
+#######################################
+# ワールド/サーバーディレクトリを NVMe (ephemeral) に配置する。EBS root の IOPS 天井
+# (gp3 3000) を回避し、Minecraft の非同期 autosave による IOPS 枯渇を防ぐ。
+# AL2023 arm64 + Nitro 下では gd 系の NVMe instance store は /dev/nvme1n1 で安定
+# (root EBS は /dev/nvme0n1p1)。
+echo "=== [2.6/7] mount NVMe instance store for world/server data ==="
+NVME_DEV=/dev/nvme1n1
+
+if ! command -v mkfs.xfs >/dev/null 2>&1; then
+    dnf install -y xfsprogs
+fi
+
+if mountpoint -q "$SERVER_DIR"; then
+    echo "$SERVER_DIR is already mounted; skip mkfs/mount"
+elif [ -b "$NVME_DEV" ]; then
+    mkfs.xfs -f "$NVME_DEV"
+    mkdir -p "$SERVER_DIR"
+    mount -o noatime,nodiratime "$NVME_DEV" "$SERVER_DIR"
+else
+    # gd 系以外のインスタンスタイプで起動すると NVMe instance store が見えない。
+    # 通常運用では CFn / Launch Template が gd 系に固定されているため発生しないが、
+    # 万一 Overrides が壊れた場合に運用者が能動的に検知できるよう Discord 通知してから fail-fast する。
+    mc_notify "🔴 FATAL: $NVME_DEV not found. Bootstrap aborted (instance type may be non-gd)."
+    echo "FATAL: $NVME_DEV not found. This launch template assumes gd-family instances." >&2
+    exit 1
+fi
+log_phase step2_6-nvme-mount-end
+
+#######################################
 # 3. ワールド資産取得
 #######################################
 echo "=== [3/7] sync world assets from S3 ==="

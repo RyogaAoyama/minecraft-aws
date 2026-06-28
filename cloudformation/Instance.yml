@@ -13,8 +13,8 @@ Parameters:
     Description: プロダクト名
   RootVolumeSize:
     Type: Number
-    Default: 30
-    Description: ルートEBS(gp3)サイズ(GiB)
+    Default: 10
+    Description: ルートEBS(gp3)サイズ(GiB)。ワールド/サーバー資産はNVMe instance storeに置くため最小限。
   AwsRegion:
     Type: String
     Default: ap-northeast-1
@@ -138,15 +138,12 @@ Resources:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref McLaunchTemplate
             Version: !GetAtt McLaunchTemplate.LatestVersionNumber
-          # Graviton2/3 の 6 候補で容量プールを最大化。
-          # 単一プールが枯渇しても他世代/AZ にフォールバックさせる。
+          # Graviton2/3 の gd 系 (NVMe instance store 付き) で 4vCPU/8GB を厳密に揃える。
+          # ワールド/サーバー資産は NVMe ephemeral (/dev/nvme1n1) に配置するため、
+          # メモリ過剰な m/r 系は外し、c6gd.xlarge / c7gd.xlarge の 2 候補に絞る。
           Overrides:
-            - InstanceType: c6g.xlarge
-            - InstanceType: m6g.xlarge
-            - InstanceType: r6g.xlarge
-            - InstanceType: c7g.xlarge
-            - InstanceType: m7g.xlarge
-            - InstanceType: r7g.xlarge
+            - InstanceType: c6gd.xlarge
+            - InstanceType: c7gd.xlarge
         InstancesDistribution:
           OnDemandBaseCapacity: 0
           OnDemandPercentageAboveBaseCapacity: 0
