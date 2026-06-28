@@ -34,7 +34,7 @@ Resources:
         Description: S3-based metrics for minecraft server (Athena via Partition Projection)
 
   ###############################
-  # Table: metrics_gc (JVM GC log → JSONL)
+  # Table: metrics_gc (JVM JFR の jdk.GarbageCollection + jdk.GCHeapSummary を join した JSONL)
   ###############################
   GcTable:
     Type: AWS::Glue::Table
@@ -73,12 +73,21 @@ Resources:
           SerdeInfo:
             SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
           Columns:
+            # ts: JFR startTime を unix epoch 秒文字列にしたもの (Athena 側で from_unixtime しやすい)。
+            # start_time: JFR の元の startTime 文字列 (ISO 8601 timestamp or epoch ns) を保存。
+            # gc_id: jdk.GarbageCollection.gcId。GCHeapSummary を join する際のキー。
+            # name: ZGC の "ZGC Major" / "ZGC Minor" などイベント名 (JDK 公式分類)。
+            # cause: GC 発生要因 (例: "Metadata GC Threshold" / "Allocation Rate" / "System.gc()")。
+            # duration_ms: jdk.GarbageCollection.duration をミリ秒に正規化。
+            # heap_before_mb / heap_after_mb: gcId が同じ GCHeapSummary の when=Before/After GC の heapUsed を MiB 化。
             - {Name: ts, Type: string}
-            - {Name: event_type, Type: string}
-            - {Name: before_heap_mb, Type: double}
-            - {Name: after_heap_mb, Type: double}
-            - {Name: pause_ms, Type: double}
+            - {Name: start_time, Type: string}
+            - {Name: gc_id, Type: int}
+            - {Name: name, Type: string}
             - {Name: cause, Type: string}
+            - {Name: duration_ms, Type: double}
+            - {Name: heap_before_mb, Type: double}
+            - {Name: heap_after_mb, Type: double}
 
   ###############################
   # Table: metrics_iostat (per-device NVMe I/O snapshot, 60s)

@@ -203,6 +203,7 @@ systemctl enable --now idle-check.timer
 systemctl enable --now minecraft-flush-metrics.timer
 systemctl enable --now minecraft-collect-iostat.timer
 systemctl enable --now minecraft-collect-node-snapshot.timer
+systemctl enable --now minecraft-collect-jfr.timer
 log_phase step6c-watchers-end
 
 #######################################

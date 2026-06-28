@@ -21,9 +21,13 @@ WorkingDirectory=/opt/minecraft/server
 #   - UseTransparentHugePages: madvise 経由で 2MB ページを要求し TLB ミスを削減（Linux + AlwaysPreTouch と相性◎）。
 #   - DisableExplicitGC: MOD 由来の System.gc() を無視し ZGC のリズムを乱さない。
 #   - PerfDisableSharedMem: /tmp/hsperfdata の競合を回避。
-#   - -Xlog:gc*,gc+heap=trace,safepoint: GC イベントを構造化テキストで /var/log/minecraft-metrics/gc.log
-#     に書き出し、後段の parse-gc-log.sh が JSONL 化して S3 + Athena に流す。
-#     filecount=10 × filesize=20M で最大 200MB に自動ローテーション (NVMe ephemeral 上)。
+#   - -XX:StartFlightRecording: JVM 公式の構造化イベント録画 (JFR) を継続稼働させ、
+#     後段の collect-jfr.sh が 60s ごとに jcmd JFR.dump → jfr print --json → JSONL 化して
+#     S3+Athena に流す。settings=default で overhead ~1%。disk=true で disk-backed の
+#     continuous recording、maxage=10m / maxsize=100M で過去 10 分または 100MB に
+#     収まる範囲を NVMe ephemeral 上にロールし続ける。
+#     旧 -Xlog:gc* + parse-gc-log.sh (正規表現方式) はフォーマット揺れとイベント
+#     取りこぼしで品質が悪く JDK 版互換性も保証できないため JFR に統一した。
 # JDK 25 で自動適用される改善（追加フラグ不要）: C2 JIT 最適化, JFR cooperative sampling 等。
 ExecStart=/usr/bin/java \
     -Xmx6G -Xms6G \
@@ -34,7 +38,7 @@ ExecStart=/usr/bin/java \
     -XX:+UseTransparentHugePages \
     -XX:+DisableExplicitGC \
     -XX:+PerfDisableSharedMem \
-    -Xlog:gc*,gc+heap=trace,safepoint:file=/var/log/minecraft-metrics/gc.log:time,uptime,level,tags:filecount=10,filesize=20M \
+    -XX:StartFlightRecording=name=mc,filename=/var/log/minecraft-metrics/mc.jfr,disk=true,maxage=10m,maxsize=100M,settings=default \
     -jar fabric-server-launch.jar nogui
 # 停止時（OSシャットダウン/ASG終了/スポット中断いずれもACPI停止→systemd停止）に必ずsaveする。
 # 続けて metrics の最終 flush を実行する (`-` prefix: 観測 flush が失敗しても停止フローは止めない)。

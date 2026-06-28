@@ -52,11 +52,7 @@ if [ -z "${INSTANCE_ID:-}" ]; then
     exit 0
 fi
 
-# GC log の JSONL 変換 hook (parse-gc-log.sh は Phase 2 で追加。存在すれば実行)
-PARSE_GC="$(dirname "$0")/parse-gc-log.sh"
-if [ -x "$PARSE_GC" ]; then
-    bash "$PARSE_GC" || echo "warn: parse-gc-log.sh failed"
-fi
+# GC は collect-jfr.sh が 60s timer で直接 gc.jsonl に書くため、ここでの hook 不要。
 
 HOUR_PATH="year=$(date -u +%Y)/month=$(date -u +%m)/day=$(date -u +%d)/hour=$(date -u +%H)/instance=${INSTANCE_ID}"
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic JFR collection (every 60s)
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+Unit=minecraft-collect-jfr.service
+
+[Install]
+WantedBy=timers.target
