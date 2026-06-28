@@ -1,0 +1,7 @@
+[Unit]
+Description=Collect JFR snapshot and emit GC events JSONL
+After=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/collect-jfr.sh

@@ -1,0 +1,7 @@
+[Unit]
+Description=Collect node snapshot (proc + RCON list + spark health)
+After=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/collect-node-snapshot.sh

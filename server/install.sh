@@ -45,7 +45,7 @@ source "$BIN_SRC/mc-notify.sh"
 # 1. ディレクトリ作成 / 実行権付与
 #######################################
 echo "=== [1/7] prepare directories and deploy management scripts ==="
-mkdir -p "$SERVER_DIR" "$BIN_DIR" /var/lib/minecraft
+mkdir -p "$SERVER_DIR" "$BIN_DIR" /var/lib/minecraft /var/log/minecraft-metrics /var/lib/minecraft-metrics
 # 展開ルートの bin/*.sh を単一bin(/opt/minecraft/bin)へコピーし、実行権を付与する
 # （S3は実行権限を保持しないため、配置後に chmod +x する）。
 cp "$BIN_SRC"/*.sh "$BIN_DIR/"
@@ -64,13 +64,25 @@ echo "=== [2/7] install dependencies ==="
 PKGS_TO_INSTALL=()
 command -v java >/dev/null 2>&1 \
     || PKGS_TO_INSTALL+=(java-25-amazon-corretto-headless)
+# JFR collector が依存する jcmd / jfr は -headless パッケージに含まれない (AL2023 の分割)。
+# 不在なら -devel を追加する (devel は headless に依存。共存可)。Component 焼き込みで先回り
+# できる Image bump 1.0.6 が予定済みだが、それ以前のインスタンスでも観測が立ち上がるよう
+# install.sh 側でも吸収する。
+command -v jcmd >/dev/null 2>&1 \
+    || PKGS_TO_INSTALL+=(java-25-amazon-corretto-devel)
 [ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ] \
     || PKGS_TO_INSTALL+=(amazon-cloudwatch-agent)
+# sysstat (iostat) / jq は metrics collector の前提。AMI 焼き込み時にも含めたいが
+# Phase 1 では Image Component bump を避けて install.sh 側で吸収する。
+command -v iostat >/dev/null 2>&1 \
+    || PKGS_TO_INSTALL+=(sysstat)
+command -v jq >/dev/null 2>&1 \
+    || PKGS_TO_INSTALL+=(jq)
 if [ "${#PKGS_TO_INSTALL[@]}" -gt 0 ]; then
     echo "installing: ${PKGS_TO_INSTALL[*]}"
     dnf install -y "${PKGS_TO_INSTALL[@]}"
 else
-    echo "java / cwagent are already present (likely pre-baked AMI); skip dnf install"
+    echo "java / cwagent / sysstat / jq are already present (likely pre-baked AMI); skip dnf install"
 fi
 if ! command -v mcrcon >/dev/null 2>&1; then
     echo "building mcrcon from source"
@@ -223,6 +235,11 @@ log_phase step6b-dns-end
 systemctl enable --now spot-watch.service
 systemctl enable --now world-sync.timer
 systemctl enable --now idle-check.timer
+# 観測メトリクスの S3 flush (5 分ごと) + collector 群 (60 秒ごと)。
+systemctl enable --now minecraft-flush-metrics.timer
+systemctl enable --now minecraft-collect-iostat.timer
+systemctl enable --now minecraft-collect-node-snapshot.timer
+systemctl enable --now minecraft-collect-jfr.timer
 log_phase step6c-watchers-end
 
 #######################################

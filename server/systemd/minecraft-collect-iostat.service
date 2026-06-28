@@ -1,0 +1,7 @@
+[Unit]
+Description=Collect iostat metrics (per-NVMe disk I/O snapshot)
+After=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/collect-iostat.sh

@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic minecraft metrics flush (every 5 min)
+
+[Timer]
+# 起動5分後に初回、以降5分間隔。停止時の最終 flush は minecraft.service ExecStop で別途実行する。
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=minecraft-flush-metrics.service
+
+[Install]
+WantedBy=timers.target

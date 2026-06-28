@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic node snapshot collection (every 60s)
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+Unit=minecraft-collect-node-snapshot.service
+
+[Install]
+WantedBy=timers.target

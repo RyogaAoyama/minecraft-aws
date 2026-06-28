@@ -12,7 +12,7 @@ function usage {
     cat <<EOM
 Usage: $(basename "$0") [OPTION]...
     -h          ヘルプ
-    -c type     [必須]デプロイするCfnの種別。net|sec|rec|img|ins|mon|fnc に対応。
+    -c type     [必須]デプロイするCfnの種別。net|sec|rec|img|ins|mon|fnc|ana に対応。
     -e prd      [必須]デプロイする環境。prd のみ対応（その他はエラー）。
     -p profile  [必須]AWS CLIのプロファイル。
 EOM
@@ -106,6 +106,10 @@ mon)
 fnc)
     TEMPLATE_PATH='./cloudformation/Function.yml'
     STACK_NAME="${PRODUCT_NAME}-fnc-${ENV}"
+    ;;
+ana)
+    TEMPLATE_PATH='./cloudformation/Analytics.yml'
+    STACK_NAME="${PRODUCT_NAME}-ana-${ENV}"
     ;;
 *)
     echo "error->cfn not supported->${CFN}"

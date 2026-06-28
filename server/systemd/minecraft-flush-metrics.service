@@ -1,0 +1,7 @@
+[Unit]
+Description=Flush local minecraft metrics to S3 (rotate, gzip, upload)
+After=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/flush-metrics.sh
