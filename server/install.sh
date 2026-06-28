@@ -64,6 +64,12 @@ echo "=== [2/7] install dependencies ==="
 PKGS_TO_INSTALL=()
 command -v java >/dev/null 2>&1 \
     || PKGS_TO_INSTALL+=(java-25-amazon-corretto-headless)
+# JFR collector が依存する jcmd / jfr は -headless パッケージに含まれない (AL2023 の分割)。
+# 不在なら -devel を追加する (devel は headless に依存。共存可)。Component 焼き込みで先回り
+# できる Image bump 1.0.6 が予定済みだが、それ以前のインスタンスでも観測が立ち上がるよう
+# install.sh 側でも吸収する。
+command -v jcmd >/dev/null 2>&1 \
+    || PKGS_TO_INSTALL+=(java-25-amazon-corretto-devel)
 [ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ] \
     || PKGS_TO_INSTALL+=(amazon-cloudwatch-agent)
 # sysstat (iostat) / jq は metrics collector の前提。AMI 焼き込み時にも含めたいが
