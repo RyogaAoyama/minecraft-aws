@@ -91,7 +91,6 @@ betterdays               # Better Days: 睡眠時のスムーズな時間経過 
 customtimecycle          # Custom Time Cycle: tick speed を変えずに昼夜の長さをカスタマイズ（サーバー専用。betterdays と昼夜長制御が機能重複するため、両者を同時に有効化する場合はどちらか一方の昼夜長機能を無効化する）
 fast-leaf-decay          # Fast Leaf Decay: 原木を切った後に残る葉を素早く腐敗させる（サーバー側ロジックのみで動作するためクライアントには不要）
 carry-on                 # Carry On: ブロック・エンティティ（チェスト・モブ等）を抱えて持ち運べる。クライアント側にも同版が必要
-spark                    # Spark: パフォーマンス/プロファイリングツール (server required / client optional)。/spark health --json を node_snapshot collector が利用
 
 # 補足:
 #   - Falling Leaves / Particle Tweaks は純粋なクライアント描画系のためサーバーには入れない。

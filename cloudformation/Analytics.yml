@@ -141,7 +141,7 @@ Resources:
             - {Name: util, Type: double}
 
   ###############################
-  # Table: metrics_node_snapshot (proc + RCON + Spark health, 60s)
+  # Table: metrics_node_snapshot (proc + RCON list + jcmd GC.heap_info, 60s)
   ###############################
   NodeSnapshotTable:
     Type: AWS::Glue::Table
@@ -186,8 +186,6 @@ Resources:
             - {Name: mem_avail_kb, Type: bigint}
             - {Name: load_1m, Type: double}
             - {Name: players, Type: int}
-            - {Name: tps_1m, Type: double}
-            - {Name: mspt_1m, Type: double}
             - {Name: heap_used_mb, Type: double}
 
 ###############################

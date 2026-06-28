@@ -1,15 +1,18 @@
 #!/bin/bash
 #
 # ノード全体スナップショット collector (60s timer)。
-# 旧 proc_stat / tps / spark_health の 3 テーブルを 1 テーブル (node_snapshot) に統合した実装。
 #
 # 1 サイクルで以下を集約し、1 JSONL 行を append:
 #   /proc:  rss_kb, cpu_percent (前回 jiffies 差分), mem_avail_kb, load_1m
 #   RCON:   players (list)
-#   Spark:  tps_1m, mspt_1m, heap_used_mb (spark health --json)
+#   jcmd:   heap_used_mb (GC.heap_info)
 #
 # 設計:
-#   - Spark mod 未ロード / クラッシュ時は Spark 由来 3 列のみ null。/proc 由来は publish 継続
+#   - heap_used_mb は jcmd GC.heap_info から ZGC の used 値をパースして取得。
+#     jcmd が応答しない / 未起動時は null のまま publish 継続。
+#   - 旧版で取っていた tps_1m / mspt_1m は spark mod の RCON 連携が
+#     Fabric 環境では機能しない (lucko/spark#119) ため撤去。同等の値を
+#     RCON 経由で安定して取得する手段は現状無いと判断。
 #   - MC が起動していない場合は丸ごと skip (Spot 中断直後など)
 #   - 状態 file: ${METRICS_STATE_DIR}/last-proc.state に "ts pid total_jiffies" を保存
 #     pid 変化時 (MC 再起動) は cpu_percent=null
@@ -76,25 +79,27 @@ if list_out=$(mc_rcon list 2>/dev/null); then
     fi
 fi
 
-# 6. RCON spark health --json → tps_1m / mspt_1m / heap_used_mb
-# Spark mod 未ロード or 応答無しは 3 列 null のまま
-tps_1m="null"
-mspt_1m="null"
+# 6. jcmd GC.heap_info → heap_used_mb
+# ZGC の出力例 (Java 25):
+#   ZHeap           used 532M, capacity 6144M, max 6144M
+# G1 等の他 GC でも "used XXXM" 形式が共通なので、最初に出てくる
+# "used <数値><単位>" を拾う。M/G は MiB/GiB として扱う。
 heap_used_mb="null"
-if spark_out=$(mc_rcon "spark health --json" 2>/dev/null); then
-    tps_val=$(echo "$spark_out" | jq -r '.tps."1m" // empty' 2>/dev/null || echo "")
-    mspt_val=$(echo "$spark_out" | jq -r '.mspt."1m".mean // empty' 2>/dev/null || echo "")
-    heap_bytes=$(echo "$spark_out" | jq -r '.memory.heap.used // empty' 2>/dev/null || echo "")
-    [ -n "$tps_val" ] && tps_1m="$tps_val"
-    [ -n "$mspt_val" ] && mspt_1m="$mspt_val"
-    if [ -n "$heap_bytes" ]; then
-        heap_used_mb=$(awk -v b="$heap_bytes" 'BEGIN { printf "%.0f", b / 1024 / 1024 }')
+if heap_out=$(jcmd "$pid" GC.heap_info 2>/dev/null); then
+    if [[ "$heap_out" =~ used[[:space:]]+([0-9]+)([KMG]) ]]; then
+        v="${BASH_REMATCH[1]}"
+        u="${BASH_REMATCH[2]}"
+        case "$u" in
+            K) heap_used_mb=$(awk -v v="$v" 'BEGIN { printf "%.0f", v / 1024 }') ;;
+            M) heap_used_mb="$v" ;;
+            G) heap_used_mb=$(awk -v v="$v" 'BEGIN { printf "%.0f", v * 1024 }') ;;
+        esac
     fi
 fi
 
 # 7. JSONL 1 行 append
 # 各値は数値 or 文字列 "null" のいずれか。JSON 上は null (識別子) として出力する。
-printf '{"ts":"%s","rss_kb":%s,"cpu_percent":%s,"mem_avail_kb":%s,"load_1m":%s,"players":%s,"tps_1m":%s,"mspt_1m":%s,"heap_used_mb":%s}\n' \
+printf '{"ts":"%s","rss_kb":%s,"cpu_percent":%s,"mem_avail_kb":%s,"load_1m":%s,"players":%s,"heap_used_mb":%s}\n' \
     "$ts" "${rss_kb:-null}" "$cpu_percent" "${mem_avail_kb:-null}" "${load_1m:-null}" \
-    "$players" "$tps_1m" "$mspt_1m" "$heap_used_mb" \
+    "$players" "$heap_used_mb" \
     | metrics_append node_snapshot
