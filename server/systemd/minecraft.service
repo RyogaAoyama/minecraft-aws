@@ -13,6 +13,13 @@ WorkingDirectory=/opt/minecraft/server
 # JDK 25 向けチューニング（旧 Aikar G1 系フラグから刷新）:
 #   - UseZGC: Generational ZGC は Java 23+ で ZGC のデフォルト動作、Java 25 で完全安定。
 #     チャンク生成等の長停止 (G1 200ms 目標) を <10ms に抑える。
+#   - SoftMaxHeapSize=5g (Issue #12): 平常時の heap 上限を 5 GB に抑え ZGC に proactive 回収を促す。
+#     DataFixerUpper (DFU) が起動時に展開した型グラフをアンロードせず保持し続けるため、
+#     6G ヒープが 96% (5.77 GB) まで張り付き Major (Proactive) GC が頻発する事象を観測した。
+#     SoftMaxHeapSize は -Xmx の "硬い上限" は変えず（必要なら 6G まで膨張可）、平常時は
+#     5G を目標に GC をスケジュールするため DFU の dead-but-retained を回収しやすくなる。
+#     1.20.5+ では Mojang が memoryleakfix で対処していた DFU 関連リークを概ね解消済みのため
+#     MOD 追加ではなく JVM 側で抑える方針（memoryleakfix mod は 1.20.5+ で公式 obsolete 宣言）。
 #   - UseCompactObjectHeaders (JEP 519, Java 25 stable): オブジェクトヘッダを 12B → 8B に圧縮。
 #     BlockPos/ItemStack/Entity 等の大量小オブジェクトで実効ヒープを 10-15% 節約しキャッシュ効率も改善。
 #   - UseStringDeduplication: ZGC と組み合わせて重複 String の内部 byte[] を共有し追加でヒープ節約
@@ -29,6 +36,7 @@ WorkingDirectory=/opt/minecraft/server
 #     ZGC は内部で必要に応じて大ページを扱う設計なので、両フラグなしでも性能影響は微小。
 ExecStart=/usr/bin/java \
     -Xmx6G -Xms6G \
+    -XX:SoftMaxHeapSize=5g \
     -XX:+UseZGC \
     -XX:+UseCompactObjectHeaders \
     -XX:+UseStringDeduplication \
