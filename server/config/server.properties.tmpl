@@ -36,3 +36,10 @@ enforce-whitelist=true
 sync-chunk-writes=false
 network-compression-threshold=512
 region-file-compression=lz4
+
+# Minecraft 1.21+ のサーバ空時 tick 停止機能。デフォルト 60s でアイドル時に
+# server thread が pause するため、観測系 (spark sampler や JFR の Java event)
+# が data を集められなくなる。観測ログ基盤前提で常時 tick を維持する。
+# アイドル停止は別途 idle-check.sh が RCON list の player 数で判定するため、
+# 常時 tick でもインスタンス自動停止には影響しない (CPU 増加分のみ)。
+pause-when-empty-seconds=0
