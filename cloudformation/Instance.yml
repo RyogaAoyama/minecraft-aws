@@ -13,8 +13,8 @@ Parameters:
     Description: プロダクト名
   RootVolumeSize:
     Type: Number
-    Default: 10
-    Description: ルートEBS(gp3)サイズ(GiB)。ワールド/サーバー資産はNVMe instance storeに置くため最小限。
+    Default: 8
+    Description: ルートEBS(gp3)サイズ(GiB)。AMIスナップショット(8GiB)と同値の最小構成。ワールド/サーバー資産はNVMe instance storeに置くため拡張不要。
   AwsRegion:
     Type: String
     Default: ap-northeast-1
