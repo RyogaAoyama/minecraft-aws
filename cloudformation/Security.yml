@@ -81,6 +81,12 @@ Resources:
                 Action:
                   - s3:ListBucket
                 Resource: !Sub arn:aws:s3:::${ProductName}-world-${Env}
+              # 観測メトリクス(JSONL.gz)を ops-logs バケット配下の metrics プレフィックスへ upload
+              - Sid: OpsLogsPutMetrics
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub arn:aws:s3:::${ProductName}-ops-logs-${Env}/metrics/*
               # AutoScaling: 自己終了 / 状態確認 + ハンドオーバー時の standby 起動依頼
               - Sid: AutoScalingSelfTerminate
                 Effect: Allow

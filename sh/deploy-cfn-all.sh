@@ -5,7 +5,7 @@
 ###   Phase1: net                                                          ###
 ###   Phase2: sec, rec, img    (並列 / net 依存)                           ###
 ###   Phase3: ins             (net/sec/rec/img 依存)                       ###
-###   Phase4: mon, fnc        (並列 / rec/ins/sec 依存)                    ###
+###   Phase4: mon, fnc, ana   (並列 / rec/ins/sec 依存)                    ###
 
 set -euo pipefail
 
@@ -122,8 +122,8 @@ echo "--- Phase 3: Instance ---"
 "${SCRIPT_DIR}/deploy-cfn.sh" -c ins -e "${ENV}" -p "${PROFILE}"
 echo "--- Phase 3 complete ---"
 
-# Phase 4: mon と fnc を並列実行（rec/ins/sec に依存）
-echo "--- Phase 4: Monitoring + Function (parallel) ---"
+# Phase 4: mon / fnc / ana を並列実行（mon, fnc は rec/ins/sec に依存。ana は rec のみ）
+echo "--- Phase 4: Monitoring + Function + Analytics (parallel) ---"
 
 "${SCRIPT_DIR}/deploy-cfn.sh" -c mon -e "${ENV}" -p "${PROFILE}" &
 PID_MON=$!
@@ -131,18 +131,29 @@ PID_MON=$!
 "${SCRIPT_DIR}/deploy-cfn.sh" -c fnc -e "${ENV}" -p "${PROFILE}" &
 PID_FNC=$!
 
+"${SCRIPT_DIR}/deploy-cfn.sh" -c ana -e "${ENV}" -p "${PROFILE}" &
+PID_ANA=$!
+
 FAILED=0
 wait ${PID_MON} || FAILED=1
 if [ ${FAILED} -ne 0 ]; then
     echo "error->Monitoring stack deploy failed"
-    kill ${PID_FNC} 2>/dev/null || true
-    wait ${PID_FNC} 2>/dev/null || true
+    kill ${PID_FNC} ${PID_ANA} 2>/dev/null || true
+    wait ${PID_FNC} ${PID_ANA} 2>/dev/null || true
     exit 1
 fi
 
 wait ${PID_FNC} || FAILED=1
 if [ ${FAILED} -ne 0 ]; then
     echo "error->Function stack deploy failed"
+    kill ${PID_ANA} 2>/dev/null || true
+    wait ${PID_ANA} 2>/dev/null || true
+    exit 1
+fi
+
+wait ${PID_ANA} || FAILED=1
+if [ ${FAILED} -ne 0 ]; then
+    echo "error->Analytics stack deploy failed"
     exit 1
 fi
 echo "--- Phase 4 complete ---"

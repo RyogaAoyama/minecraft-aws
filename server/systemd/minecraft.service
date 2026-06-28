@@ -21,6 +21,9 @@ WorkingDirectory=/opt/minecraft/server
 #   - UseTransparentHugePages: madvise 経由で 2MB ページを要求し TLB ミスを削減（Linux + AlwaysPreTouch と相性◎）。
 #   - DisableExplicitGC: MOD 由来の System.gc() を無視し ZGC のリズムを乱さない。
 #   - PerfDisableSharedMem: /tmp/hsperfdata の競合を回避。
+#   - -Xlog:gc*,gc+heap=trace,safepoint: GC イベントを構造化テキストで /var/log/minecraft-metrics/gc.log
+#     に書き出し、後段の parse-gc-log.sh が JSONL 化して S3 + Athena に流す。
+#     filecount=10 × filesize=20M で最大 200MB に自動ローテーション (NVMe ephemeral 上)。
 # JDK 25 で自動適用される改善（追加フラグ不要）: C2 JIT 最適化, JFR cooperative sampling 等。
 ExecStart=/usr/bin/java \
     -Xmx6G -Xms6G \
@@ -31,10 +34,13 @@ ExecStart=/usr/bin/java \
     -XX:+UseTransparentHugePages \
     -XX:+DisableExplicitGC \
     -XX:+PerfDisableSharedMem \
+    -Xlog:gc*,gc+heap=trace,safepoint:file=/var/log/minecraft-metrics/gc.log:time,uptime,level,tags:filecount=10,filesize=20M \
     -jar fabric-server-launch.jar nogui
 # 停止時（OSシャットダウン/ASG終了/スポット中断いずれもACPI停止→systemd停止）に必ずsaveする。
+# 続けて metrics の最終 flush を実行する (`-` prefix: 観測 flush が失敗しても停止フローは止めない)。
 ExecStop=/opt/minecraft/bin/save-and-sync.sh
-# スポット中断猶予(約2分)内に save+S3同期を終えるための停止タイムアウト。
+ExecStop=-/opt/minecraft/bin/flush-metrics.sh
+# スポット中断猶予(約2分)内に save+S3同期+metrics flush を終えるための停止タイムアウト。
 TimeoutStopSec=110
 Restart=on-failure
 RestartSec=10
