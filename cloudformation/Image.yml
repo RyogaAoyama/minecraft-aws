@@ -16,9 +16,14 @@ Parameters:
     Default: ap-northeast-1
     Description: 稼働リージョン
   BaseAmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
-    Description: ベース AMI(AL2023 arm64)。CFn デプロイ時に SSM 公開パラメータから解決され、Image Recipe の ParentImage に渡される
+    Type: AWS::EC2::Image::Id
+    Default: ami-06c0572560181f1c8
+    Description: |
+      ベース AMI(AL2023 arm64)。以前は /aws/service/ami-amazon-linux-latest/... の SSM 動的解決を使っていたが、
+      AWS 側で latest AMI が更新される度に Recipe.ParentImage プロパティが自動変化し、
+      Recipe.Version を bump し忘れると "ImageRecipe already exists" で UPDATE_FAILED になる不具合があった
+      (Image.yml 内の Version bump ポリシーコメント通り「意図的に bump した時だけ base 更新」を保証するため直値化)。
+      AL2023 のセキュリティパッチを取り込みたい時は Recipe/Component Version bump とセットでこの Default を差し替える。
   BuildInstanceType:
     Type: String
     Default: c6g.medium
@@ -119,12 +124,13 @@ Resources:
   ### 1.0.4: 焼き込む Corretto を 22 → 25 (LTS) に更新（実態は Recipe の JavaVersion 値が CFn Parameter 経由で "22" 固定のままだったため反映されず）。
   ### 1.0.5: Recipe の JavaVersion を CFn Parameter 解決から直値 "25" に変更し、AMI が確実に Java25 で焼かれるようにする。Component 側のテンプレ機構はそのまま残す。
   ### 1.0.6: dnf install を corretto-headless → corretto-devel に変更し、JFR collector が必要とする jcmd / jfr バイナリも AMI に焼き込まれるようにする (headless は JRE 相当で JDK ツール非同梱、devel は headless に依存するため共存可)。
+  ### 1.0.7: BaseAmiId 動的 SSM 解決の廃止に伴う bump。同時に AL2023 arm64 の最新 base AMI (ami-06c0572560181f1c8) を取り込む (セキュリティパッチ含む)。Component 側 install スクリプトの内容変更は無いが、Recipe.Version と Component.Version を lock-step で運用しているため合わせて bump する。
   McImageComponent:
     Type: AWS::ImageBuilder::Component
     Properties:
       Name: !Sub ${ProductName}-component-${Env}
       Platform: Linux
-      Version: 1.0.6
+      Version: 1.0.7
       Description: Install Java / CWAgent / mcrcon + bake bootstrap for minecraft fabric server
       Data: |
         schemaVersion: 1.0
@@ -235,7 +241,7 @@ Resources:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${ProductName}-recipe-${Env}
-      Version: 1.0.6
+      Version: 1.0.7
       Description: AL2023 arm64 + minecraft runtime dependencies + baked bootstrap
       ParentImage: !Ref BaseAmiId
       Components:
