@@ -45,7 +45,8 @@ source "$BIN_SRC/mc-notify.sh"
 # 1. ディレクトリ作成 / 実行権付与
 #######################################
 echo "=== [1/7] prepare directories and deploy management scripts ==="
-mkdir -p "$SERVER_DIR" "$BIN_DIR" /var/lib/minecraft /var/log/minecraft-metrics /var/lib/minecraft-metrics
+# 観測メトリクスの JSONL/state ディレクトリは NVMe マウント後 (Step 2.7) に作成する。
+mkdir -p "$SERVER_DIR" "$BIN_DIR" /var/lib/minecraft
 # 展開ルートの bin/*.sh を単一bin(/opt/minecraft/bin)へコピーし、実行権を付与する
 # （S3は実行権限を保持しないため、配置後に chmod +x する）。
 cp "$BIN_SRC"/*.sh "$BIN_DIR/"
@@ -158,6 +159,29 @@ else
     exit 1
 fi
 log_phase step2_6-nvme-mount-end
+
+#######################################
+# 2.7. 観測ログを NVMe / RAM に逃がす
+#######################################
+# 観測系の出力先を NVMe (metrics JSONL/state, JFR continuous recording) と
+# RAM (journald) に集約し、EBS root への定常 write をほぼゼロにする。
+# - METRICS_LOG_DIR / METRICS_STATE_DIR は metrics-common.sh の定義と一致させる。
+# - mc.jfr (continuous recording, 最大 100 MiB) もここに同居する (filename 指定は
+#   minecraft.service 側)。
+# - journald は Storage=volatile で tmpfs (/run/log/journal) に書く。停止で消える
+#   が、これは元々の Storage=persistent でも EBS root ごと削除されるため挙動同一
+#   (Issue #17 の判断)。
+echo "=== [2.7/7] route observability writes off EBS root (NVMe + tmpfs) ==="
+mkdir -p "$SERVER_DIR/metrics" "$SERVER_DIR/metrics-state"
+
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/volatile.conf <<'EOF'
+[Journal]
+Storage=volatile
+RuntimeMaxUse=200M
+EOF
+systemctl restart systemd-journald
+log_phase step2_7-observability-route-end
 
 #######################################
 # 3. ワールド資産取得

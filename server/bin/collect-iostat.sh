@@ -3,7 +3,7 @@
 # ディスク I/O メトリクス collector。60s timer から呼ばれる。
 #
 # iostat -x -o JSON で nvme* デバイス (root EBS = nvme0n1 / NVMe ephemeral = nvme1n1) を抽出し、
-# per-device で 1 行ずつ JSONL を /var/log/minecraft-metrics/iostat.jsonl に append する。
+# per-device で 1 行ずつ JSONL を /opt/minecraft/server/metrics/iostat.jsonl に append する。
 #
 # 設計:
 #   - iostat 自身の interval を 1s × 1 回にしてサンプルを取得 (jiffies 差分ベース)

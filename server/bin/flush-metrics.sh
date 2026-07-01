@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# /var/log/minecraft-metrics/<kind>.jsonl を rotate → gzip → S3 へ upload する。
+# /opt/minecraft/server/metrics/<kind>.jsonl を rotate → gzip → S3 へ upload する。
 #
 # 呼び出し経路:
 #   - minecraft-flush-metrics.timer (5 分ごと)
