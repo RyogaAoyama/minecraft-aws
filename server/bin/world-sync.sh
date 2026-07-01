@@ -19,6 +19,8 @@
 #     消えてもサーバー稼働中に再生成可能 + 巨大化しがちなため逆同期から除外する。
 #   - 反対に libraries/ と vanilla server.jar は launcher が自己DLする＝手動管理外なので、
 #     S3 に永続化して次回起動時の外部再DL(server.jar ~150MB 等)を避け起動を高速化する。
+#   - metrics/ と metrics-state/ は観測 collector の出力先 (NVMe ephemeral 限定で
+#     S3 永続化対象外。Issue #17)。flush-metrics.sh が別経路で S3 に送るためここでは除外する。
 #   - level.dat の存在を最低限ガードし、空/壊れたローカルで保管庫を上書きしない。
 
 set -euo pipefail
@@ -77,7 +79,9 @@ aws s3 sync "$MC_DIR/server/" "s3://$WORLD_BUCKET/world/" \
     --exclude "logs/*" \
     --exclude "*.log" \
     --exclude "mods/*" \
-    --exclude "*DistantHorizons*"
+    --exclude "*DistantHorizons*" \
+    --exclude "metrics/*" \
+    --exclude "metrics-state/*"
 
 # save-off していた場合のみ save-on で戻す。
 if [ "$RCON_HELD" -eq 1 ]; then

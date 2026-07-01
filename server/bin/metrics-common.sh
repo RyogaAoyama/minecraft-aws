@@ -11,8 +11,13 @@
 #     まとめて 1 回の cat に渡す)
 #   - lock 保持時間は最小化 (cat の所要時間のみ。秒未満)
 
-METRICS_LOG_DIR=/var/log/minecraft-metrics
-METRICS_STATE_DIR=/var/lib/minecraft-metrics
+# JSONL / state は NVMe instance store (xfs on /opt/minecraft/server) に置く。
+# 目的:
+#   - root EBS 8 GiB への適合と EBS write 削減。
+#   - EC2 停止で消えるが、flush-metrics.sh が rotate して S3 に送るため永続化不要
+#     (Issue #17)。
+METRICS_LOG_DIR=/opt/minecraft/server/metrics
+METRICS_STATE_DIR=/opt/minecraft/server/metrics-state
 
 # 標準入力から受け取った内容を ${METRICS_LOG_DIR}/<kind>.jsonl に追記する。
 # flush-metrics.sh が同名 lock を取って mv するため、append は subshell + flock で同期する。

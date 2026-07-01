@@ -41,7 +41,7 @@ ExecStart=/usr/bin/java \
     -XX:+UseStringDeduplication \
     -XX:+DisableExplicitGC \
     -XX:+PerfDisableSharedMem \
-    -XX:StartFlightRecording=name=mc,filename=/var/log/minecraft-metrics/mc.jfr,disk=true,maxage=10m,maxsize=100M,settings=default \
+    -XX:StartFlightRecording=name=mc,filename=/opt/minecraft/server/metrics/mc.jfr,disk=true,maxage=10m,maxsize=100M,settings=default \
     -jar fabric-server-launch.jar nogui
 # 停止時（OSシャットダウン/ASG終了/スポット中断いずれもACPI停止→systemd停止）に必ずsaveする。
 # 続けて metrics の最終 flush を実行する (`-` prefix: 観測 flush が失敗しても停止フローは止めない)。

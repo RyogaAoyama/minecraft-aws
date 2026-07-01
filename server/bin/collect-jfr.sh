@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 # JFR (Java Flight Recorder) スナップショットから GC イベントを抽出し
-# /var/log/minecraft-metrics/gc.jsonl に append する。60s timer から呼ばれる。
+# /opt/minecraft/server/metrics/gc.jsonl に append する。60s timer から呼ばれる。
 #
 # JVM 側 (minecraft.service) で以下の継続録画が動いている前提:
-#   -XX:StartFlightRecording=name=mc,filename=/var/log/minecraft-metrics/mc.jfr,
+#   -XX:StartFlightRecording=name=mc,filename=/opt/minecraft/server/metrics/mc.jfr,
 #       disk=true,maxage=10m,maxsize=100M,settings=default
 #
 # 1 サイクルの流れ:
