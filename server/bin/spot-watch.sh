@@ -55,7 +55,7 @@ function try_handover {
     # 順序が重要: standby が install.sh の Step3 で S3 から world を取り込む時点で、
     # 「中断検知直前の状態」が S3 に載っている必要がある（さもないと world-sync.timer の
     # 最後の save 時点まで巻き戻る）。
-    # この save が遅れると最大 15 分（world-sync.timer の周期）分の進捗が standby に
+    # この save が遅れると最大 5 分（world-sync.timer の周期）分の進捗が standby に
     # 反映されない問題が起きる。
     echo "handover: pre-save world before launching standby (critical for data freshness)"
     bash "$SCRIPT_DIR/save-and-sync.sh" || {
