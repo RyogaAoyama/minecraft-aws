@@ -1,10 +1,10 @@
 [Unit]
-Description=Periodic Minecraft world sync to S3 (every 15 min)
+Description=Periodic Minecraft world sync to S3 (every 5 min)
 
 [Timer]
-# 起動15分後に初回、以降は前回実行から15分間隔で定期同期する。
-OnUnitActiveSec=15min
-OnBootSec=15min
+# 起動5分後に初回、以降は前回実行から5分間隔で定期同期する。
+OnUnitActiveSec=5min
+OnBootSec=5min
 Unit=world-sync.service
 
 [Install]

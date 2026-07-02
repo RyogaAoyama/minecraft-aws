@@ -13,7 +13,7 @@ Parameters:
     Description: プロダクト名
   NonCurrentVersionExpirationDays:
     Type: Number
-    Default: 30
+    Default: 14
     Description: world非現行バージョンを削除するまでの日数
 
 ###############################

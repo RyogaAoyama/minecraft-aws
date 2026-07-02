@@ -22,7 +22,7 @@ Discord のスラッシュコマンドで起動し、誰もログインしてい
                                                                                             |
    UserData → install.sh: EIP関連付け → Java21/CWAgent/mcrcon導入 → S3からworld同期 → MC起動 → timer起動
                                                                                             |
-   - world-sync.timer (15分毎: save-all → S3同期)
+   - world-sync.timer (5分毎: save-all → S3同期)
    - idle-check.timer (毎分: RCON list → 0人10分継続で save+S3同期+自己終了)
    - spot-watch.service (3秒毎: 中断検知で save+S3同期)
    - minecraft.service ExecStop (停止時に必ず save+S3同期)
